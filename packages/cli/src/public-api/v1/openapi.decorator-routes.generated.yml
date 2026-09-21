@@ -3,6 +3,9 @@ info:
   title: decorator-routes
   version: 0.0.0
 paths:
+  /audit:
+    post:
+      $ref: ./handlers/audit/spec/paths/generateAudit.generated.yml
   /credential-type-policies/instance:
     get:
       $ref: ./handlers/credential-type-policies/spec/paths/getCredentialTypeInstancePolicy.generated.yml
