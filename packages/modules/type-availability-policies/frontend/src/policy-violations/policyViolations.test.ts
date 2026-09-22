@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
-import saveRefused403 from '../__tests__/fixtures/save-refused-403.json';
 import { getPolicyViolations } from './policyViolations';
+
+const saveRefused403 = {
+	message: 'Node type "n8n-nodes-base.slack" is blocked by an instance policy',
+	meta: {
+		violations: [
+			{
+				kind: 'node-type-unavailable',
+				checkId: 'node-type-availability',
+				message: 'Node type "n8n-nodes-base.slack" is blocked by an instance policy',
+				subject: 'n8n-nodes-base.slack',
+				subjectType: 'nodeType',
+				scope: 'instance',
+				matchedRuleId: 'deny-n8n-nodes-base.slack',
+			},
+		],
+	},
+};
 
 const storedExecutionError = {
 	message: 'Workflow start is blocked by a project policy',

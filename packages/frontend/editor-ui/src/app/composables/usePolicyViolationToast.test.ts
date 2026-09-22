@@ -93,6 +93,8 @@ describe('usePolicyViolationToast', () => {
 			ids: ['slack-1', 'slack-2'],
 			panIntoView: true,
 		});
+
+		emitSpy.mockRestore();
 	});
 
 	it('closes the toast it showed before it shows the next one', () => {
