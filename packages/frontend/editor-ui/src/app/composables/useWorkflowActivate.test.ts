@@ -131,8 +131,18 @@ vi.mock('@n8n/composables/useTelemetry', () => ({
 	useTelemetry: vi.fn().mockReturnValue({ track: vi.fn() }),
 }));
 
+const mockShowError = vi.hoisted(() => vi.fn());
+
 vi.mock('@n8n/composables/useToast', () => ({
-	useToast: vi.fn().mockReturnValue({ showError: vi.fn(), showMessage: vi.fn() }),
+	useToast: vi.fn().mockReturnValue({ showError: mockShowError, showMessage: vi.fn() }),
+}));
+
+const mockShowPolicyViolationToast = vi.hoisted(() => vi.fn(() => false));
+
+vi.mock('@/app/composables/usePolicyViolationToast', () => ({
+	usePolicyViolationToast: vi
+		.fn()
+		.mockReturnValue({ showPolicyViolationToast: mockShowPolicyViolationToast }),
 }));
 
 // Models the "Don't show again" flag of the activation success modal.
@@ -228,6 +238,24 @@ describe('useWorkflowActivate', () => {
 
 			expect(result).toEqual({ success: false, errorHandled: true });
 			expect(mockSetPublicationStatus).not.toHaveBeenCalled();
+			expect(mockShowError).toHaveBeenCalled();
+		});
+
+		it('leaves a publish refused by policy to the policy violation toast', async () => {
+			const refusal = Object.assign(new Error('Blocked by an instance policy'), {
+				meta: { violations: [{ kind: 'node-type-unavailable', checkId: 'c', message: 'Blocked' }] },
+			});
+			mockPublishWorkflow.mockRejectedValueOnce(refusal);
+			mockShowPolicyViolationToast.mockReturnValueOnce(true);
+
+			const { publishWorkflow } = useWorkflowActivate();
+			const result = await publishWorkflow(WORKFLOW_ID, VERSION_ID);
+
+			expect(result).toEqual({ success: false, errorHandled: true });
+			expect(mockShowPolicyViolationToast).toHaveBeenCalledWith(refusal, expect.any(String));
+			expect(mockShowError).not.toHaveBeenCalled();
+			// The publish did not happen, so the workflow must not look published.
+			expect(mockSetWorkflowInactive).toHaveBeenCalledWith(WORKFLOW_ID);
 		});
 
 		it('sends the document checksum and refreshes it when the document is open in an editor', async () => {
