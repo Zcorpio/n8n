@@ -7,7 +7,6 @@ import {
 } from '@n8n/frontend-module-type-availability-policies';
 import { canvasEventBus } from '@/features/workflows/canvas/canvas.eventBus';
 import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
-import { useCredentialsStore } from '@/features/credentials/credentials.store';
 import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import {
 	createWorkflowDocumentId,
@@ -18,26 +17,16 @@ import {
 let activeToast: NotificationHandle | undefined;
 
 const NODE_TYPE_SUBJECT = 'nodeType';
-const CREDENTIAL_TYPE_SUBJECT = 'credentialType';
 
 export function usePolicyViolationToast() {
 	const toast = useToast();
 	const workflowsStore = useWorkflowsStore();
 	const nodeTypesStore = useNodeTypesStore();
-	const credentialsStore = useCredentialsStore();
 
 	function displayNameOf({ subject, subjectType }: PolicyViolation): string | undefined {
-		if (subject === undefined) return undefined;
+		if (subject === undefined || subjectType !== NODE_TYPE_SUBJECT) return undefined;
 
-		if (subjectType === NODE_TYPE_SUBJECT) {
-			return nodeTypesStore.getNodeType(subject)?.displayName;
-		}
-
-		if (subjectType === CREDENTIAL_TYPE_SUBJECT) {
-			return credentialsStore.getCredentialTypeByName(subject)?.displayName;
-		}
-
-		return undefined;
+		return nodeTypesStore.getNodeType(subject)?.displayName;
 	}
 
 	function nodeIdsOfType(nodeType: string, documentId: WorkflowDocumentId): string[] {

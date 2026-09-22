@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import PolicyViolationList from './PolicyViolationList.vue';
 
 const SLACK_NODE_TYPE = 'n8n-nodes-base.slack';
-const GMAIL_CREDENTIAL_TYPE = 'gmailOAuth2';
+const GITHUB_NODE_TYPE = 'n8n-nodes-base.github';
 
 const slackNodeType: PolicyViolation = {
 	kind: 'node-type-unavailable',
@@ -17,12 +17,12 @@ const slackNodeType: PolicyViolation = {
 	scope: 'instance',
 };
 
-const gmailCredentialType: PolicyViolation = {
+const githubNodeType: PolicyViolation = {
 	kind: 'node-type-unavailable',
 	checkId: 'node-type-availability',
-	message: `Credential type "${GMAIL_CREDENTIAL_TYPE}" is blocked in this project`,
-	subject: GMAIL_CREDENTIAL_TYPE,
-	subjectType: 'credentialType',
+	message: `Node type "${GITHUB_NODE_TYPE}" is blocked in this project`,
+	subject: GITHUB_NODE_TYPE,
+	subjectType: 'nodeType',
 	scope: 'project',
 };
 
@@ -33,7 +33,7 @@ const renderComponent = createComponentRenderer(PolicyViolationList, {
 describe('PolicyViolationList', () => {
 	it('renders one line for each violation with its type, reason and scope', () => {
 		const { getAllByTestId } = renderComponent({
-			props: { violations: [slackNodeType, gmailCredentialType] },
+			props: { violations: [slackNodeType, githubNodeType] },
 		});
 
 		const lines = getAllByTestId('policy-violation');
@@ -41,7 +41,7 @@ describe('PolicyViolationList', () => {
 		expect(lines).toHaveLength(2);
 		expect(lines[0]).toHaveTextContent("Node type 'n8n-nodes-base.slack': not available");
 		expect(lines[0]).toHaveTextContent('Restricted on this instance');
-		expect(lines[1]).toHaveTextContent(`Credential type '${GMAIL_CREDENTIAL_TYPE}': not available`);
+		expect(lines[1]).toHaveTextContent(`Node type '${GITHUB_NODE_TYPE}': not available`);
 		expect(lines[1]).toHaveTextContent('Restricted in this project');
 	});
 
@@ -91,7 +91,7 @@ describe('PolicyViolationList', () => {
 	it('offers a jump only for a jumpable subject and emits that violation', async () => {
 		const { getAllByTestId, getByTestId, emitted } = renderComponent({
 			props: {
-				violations: [slackNodeType, gmailCredentialType],
+				violations: [slackNodeType, githubNodeType],
 				jumpableSubjects: [SLACK_NODE_TYPE],
 			},
 		});

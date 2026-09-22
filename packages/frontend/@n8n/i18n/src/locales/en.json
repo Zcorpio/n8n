@@ -2462,7 +2462,6 @@
 	"typeAvailabilityPolicies.violations.headline": "{subjectTypeLabel} '{subject}': {reason}",
 	"typeAvailabilityPolicies.violations.headlineWithoutType": "'{subject}': {reason}",
 	"typeAvailabilityPolicies.violations.subjectType.nodeType": "Node type",
-	"typeAvailabilityPolicies.violations.subjectType.credentialType": "Credential type",
 	"typeAvailabilityPolicies.violations.kind.nodeTypeUnavailable": "not available",
 	"typeAvailabilityPolicies.violations.jump": "Show in workflow",
 	"nodeView.addNode": "Add node",
