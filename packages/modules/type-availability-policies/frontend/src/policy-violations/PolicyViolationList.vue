@@ -34,10 +34,10 @@ const SCOPE_LABEL_KEY: Record<string, BaseTextKey | undefined> = {
 
 function headline(violation: PolicyViolation): string {
 	const { subject, subjectType, kind, message } = violation;
-	if (!subject) return message;
-
 	const reasonKey = KIND_REASON_KEY[kind];
-	const reason = reasonKey ? i18n.baseText(reasonKey) : kind;
+	if (!subject || !reasonKey) return message;
+
+	const reason = i18n.baseText(reasonKey);
 	const labelKey = subjectType ? SUBJECT_TYPE_LABEL_KEY[subjectType] : undefined;
 	const subjectTypeLabel = labelKey ? i18n.baseText(labelKey) : subjectType;
 	const subjectLabel = props.subjectLabels[subject] ?? subject;

@@ -45,16 +45,14 @@ describe('PolicyViolationList', () => {
 		expect(lines[1]).toHaveTextContent('Restricted in this project');
 	});
 
-	it('renders an unknown kind and scope as their raw values', () => {
+	it('renders the message for an unknown kind, and the raw scope', () => {
 		const { getByTestId } = renderComponent({
 			props: {
 				violations: [{ ...slackNodeType, kind: 'node-type-deprecated', scope: 'team' }],
 			},
 		});
 
-		expect(getByTestId('policy-violation')).toHaveTextContent(
-			"Node type 'n8n-nodes-base.slack': node-type-deprecated",
-		);
+		expect(getByTestId('policy-violation')).toHaveTextContent(slackNodeType.message);
 		expect(getByTestId('policy-violation')).toHaveTextContent('team');
 	});
 
