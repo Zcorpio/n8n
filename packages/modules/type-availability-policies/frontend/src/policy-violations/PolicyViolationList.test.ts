@@ -40,9 +40,9 @@ describe('PolicyViolationList', () => {
 
 		expect(lines).toHaveLength(2);
 		expect(lines[0]).toHaveTextContent("Node type 'n8n-nodes-base.slack': not available");
-		expect(lines[0]).toHaveTextContent('Blocked for the whole instance');
+		expect(lines[0]).toHaveTextContent('Restricted on this instance');
 		expect(lines[1]).toHaveTextContent(`Credential type '${GMAIL_CREDENTIAL_TYPE}': not available`);
-		expect(lines[1]).toHaveTextContent('Blocked in this project');
+		expect(lines[1]).toHaveTextContent('Restricted in this project');
 	});
 
 	it('renders an unknown kind and scope as their raw values', () => {

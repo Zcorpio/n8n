@@ -2464,8 +2464,6 @@
 	"typeAvailabilityPolicies.violations.subjectType.nodeType": "Node type",
 	"typeAvailabilityPolicies.violations.subjectType.credentialType": "Credential type",
 	"typeAvailabilityPolicies.violations.kind.nodeTypeUnavailable": "not available",
-	"typeAvailabilityPolicies.violations.scope.instance": "Blocked for the whole instance",
-	"typeAvailabilityPolicies.violations.scope.project": "Blocked in this project",
 	"typeAvailabilityPolicies.violations.jump": "Show in workflow",
 	"nodeView.addNode": "Add node",
 	"nodeView.openFocusPanel": "Open focus panel",

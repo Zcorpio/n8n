@@ -32,8 +32,8 @@ const KIND_REASON_KEY: Record<string, BaseTextKey | undefined> = {
 };
 
 const SCOPE_LABEL_KEY: Record<string, BaseTextKey | undefined> = {
-	instance: 'typeAvailabilityPolicies.violations.scope.instance',
-	project: 'typeAvailabilityPolicies.violations.scope.project',
+	instance: 'typeAvailabilityPolicies.restrictedNode.scope.instance',
+	project: 'typeAvailabilityPolicies.restrictedNode.scope.project',
 };
 
 function headline(violation: PolicyViolation): string {
