@@ -70,17 +70,6 @@ describe('PolicyViolationList', () => {
 		expect(getByTestId('policy-violation')).not.toHaveTextContent(SLACK_NODE_TYPE);
 	});
 
-	it('offers no jump for a credential type, even when the host lists its subject', () => {
-		const { queryByTestId } = renderComponent({
-			props: {
-				violations: [gmailCredentialType],
-				jumpableSubjects: [GMAIL_CREDENTIAL_TYPE],
-			},
-		});
-
-		expect(queryByTestId('policy-violation-jump')).not.toBeInTheDocument();
-	});
-
 	it('renders the message when the violation names no subject', () => {
 		const { getByTestId } = renderComponent({
 			props: {
