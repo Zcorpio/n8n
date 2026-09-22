@@ -18,7 +18,6 @@ const emit = defineEmits<{ jump: [violation: PolicyViolation] }>();
 
 const i18n = useI18n();
 
-// `subjectType`, `kind` and `scope` are open strings, so an unknown value renders as itself.
 const SUBJECT_TYPE_LABEL_KEY: Record<string, BaseTextKey | undefined> = {
 	nodeType: 'typeAvailabilityPolicies.violations.subjectType.nodeType',
 };

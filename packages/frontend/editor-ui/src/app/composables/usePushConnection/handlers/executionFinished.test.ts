@@ -994,7 +994,7 @@ describe('manual execution stats tracking', () => {
 			expect(incrementSpy).toHaveBeenCalledWith('error');
 		});
 
-		it('leaves a run refused by policy to the policy violation toast', () => {
+		it('leaves a run refused by policy to the policy violation toast for the document that ran', () => {
 			setActivePinia(createTestingPinia());
 			mockShowMessage.mockClear();
 			mockShowPolicyViolationToast.mockReturnValueOnce(true);
@@ -1014,7 +1014,6 @@ describe('manual execution stats tracking', () => {
 				createWorkflowDocumentId(''),
 			);
 
-			// The run handler names the document, so the jump resolves nodes in that workflow.
 			expect(mockShowPolicyViolationToast).toHaveBeenCalledWith(
 				error,
 				expect.any(String),

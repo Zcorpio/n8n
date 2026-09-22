@@ -254,7 +254,6 @@ describe('useWorkflowActivate', () => {
 			expect(result).toEqual({ success: false, errorHandled: true });
 			expect(mockShowPolicyViolationToast).toHaveBeenCalledWith(refusal, expect.any(String));
 			expect(mockShowError).not.toHaveBeenCalled();
-			// The publish did not happen, so the workflow must not look published.
 			expect(mockSetWorkflowInactive).toHaveBeenCalledWith(WORKFLOW_ID);
 		});
 

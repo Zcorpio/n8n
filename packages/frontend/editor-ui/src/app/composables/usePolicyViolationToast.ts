@@ -44,7 +44,6 @@ export function usePolicyViolationToast() {
 		const violations = getPolicyViolations(error);
 		if (!violations) return false;
 
-		// A subject is a type name, so one violation can point at several nodes.
 		const nodeIdsBySubject = new Map<string, string[]>();
 		const subjectLabels: Record<string, string> = {};
 
