@@ -18,6 +18,9 @@ import {
 import { usePolicyViolationToast } from './usePolicyViolationToast';
 
 const showMessageSpy = vi.hoisted(() => vi.fn());
+const closeSpy = vi.fn();
+
+showMessageSpy.mockReturnValue({ close: closeSpy });
 
 vi.mock('@n8n/composables/useToast', () => ({
 	useToast: () => ({ showMessage: showMessageSpy }),
@@ -65,6 +68,7 @@ describe('usePolicyViolationToast', () => {
 	beforeEach(() => {
 		setActivePinia(createTestingPinia({ stubActions: false }));
 		showMessageSpy.mockClear();
+		closeSpy.mockClear();
 	});
 
 	it('shows one toast that jumps to every node of the refused type', async () => {
@@ -89,6 +93,16 @@ describe('usePolicyViolationToast', () => {
 			ids: ['slack-1', 'slack-2'],
 			panIntoView: true,
 		});
+	});
+
+	it('closes the toast it showed before it shows the next one', () => {
+		const { showPolicyViolationToast } = usePolicyViolationToast();
+
+		showPolicyViolationToast(refusedWith([slackViolation]), 'Problem saving');
+		closeSpy.mockClear();
+		showPolicyViolationToast(refusedWith([slackViolation]), 'Problem saving');
+
+		expect(closeSpy).toHaveBeenCalledTimes(1);
 	});
 
 	it('offers no jump when the open workflow holds no node of the refused type', () => {

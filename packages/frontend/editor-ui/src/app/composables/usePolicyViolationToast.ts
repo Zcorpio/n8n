@@ -1,6 +1,6 @@
 import { h } from 'vue';
 import type { PolicyViolation } from '@n8n/api-types';
-import { useToast } from '@n8n/composables/useToast';
+import { useToast, type NotificationHandle } from '@n8n/composables/useToast';
 import {
 	getPolicyViolations,
 	PolicyViolationList,
@@ -14,6 +14,8 @@ import {
 	useWorkflowDocumentStore,
 	type WorkflowDocumentId,
 } from '@/app/stores/workflowDocument.store';
+
+let activeToast: NotificationHandle | undefined;
 
 const NODE_TYPE_SUBJECT = 'nodeType';
 const CREDENTIAL_TYPE_SUBJECT = 'credentialType';
@@ -70,7 +72,8 @@ export function usePolicyViolationToast() {
 			if (ids.length > 0) nodeIdsBySubject.set(subject, ids);
 		}
 
-		toast.showMessage({
+		activeToast?.close();
+		activeToast = toast.showMessage({
 			title,
 			type: 'error',
 			duration: 0,
