@@ -18,10 +18,13 @@ const emit = defineEmits<{ jump: [violation: PolicyViolation] }>();
 
 const i18n = useI18n();
 
+const NODE_TYPE_SUBJECT = 'nodeType';
+const CREDENTIAL_TYPE_SUBJECT = 'credentialType';
+
 // `subjectType`, `kind` and `scope` are open strings, so an unknown value renders as itself.
 const SUBJECT_TYPE_LABEL_KEY: Record<string, BaseTextKey | undefined> = {
-	nodeType: 'typeAvailabilityPolicies.violations.subjectType.nodeType',
-	credentialType: 'typeAvailabilityPolicies.violations.subjectType.credentialType',
+	[NODE_TYPE_SUBJECT]: 'typeAvailabilityPolicies.violations.subjectType.nodeType',
+	[CREDENTIAL_TYPE_SUBJECT]: 'typeAvailabilityPolicies.violations.subjectType.credentialType',
 };
 
 const KIND_REASON_KEY: Record<string, BaseTextKey | undefined> = {
@@ -62,8 +65,13 @@ function scopeLabel(violation: PolicyViolation): string | undefined {
 	return key ? i18n.baseText(key) : scope;
 }
 
-function isJumpable(violation: PolicyViolation): boolean {
-	return violation.subject !== undefined && props.jumpableSubjects.includes(violation.subject);
+// Only a node type can be shown on the canvas, whatever the host listed as jumpable.
+function isJumpable({ subject, subjectType }: PolicyViolation): boolean {
+	return (
+		subjectType === NODE_TYPE_SUBJECT &&
+		subject !== undefined &&
+		props.jumpableSubjects.includes(subject)
+	);
 }
 </script>
 

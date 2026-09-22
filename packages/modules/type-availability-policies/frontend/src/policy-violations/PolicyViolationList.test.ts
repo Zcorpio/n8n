@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import PolicyViolationList from './PolicyViolationList.vue';
 
 const SLACK_NODE_TYPE = 'n8n-nodes-base.slack';
+const GMAIL_CREDENTIAL_TYPE = 'gmailOAuth2';
 
 const slackNodeType: PolicyViolation = {
 	kind: 'node-type-unavailable',
@@ -19,8 +20,8 @@ const slackNodeType: PolicyViolation = {
 const gmailCredentialType: PolicyViolation = {
 	kind: 'node-type-unavailable',
 	checkId: 'node-type-availability',
-	message: 'Credential type "gmailOAuth2" is blocked in this project',
-	subject: 'gmailOAuth2',
+	message: `Credential type "${GMAIL_CREDENTIAL_TYPE}" is blocked in this project`,
+	subject: GMAIL_CREDENTIAL_TYPE,
 	subjectType: 'credentialType',
 	scope: 'project',
 };
@@ -40,7 +41,7 @@ describe('PolicyViolationList', () => {
 		expect(lines).toHaveLength(2);
 		expect(lines[0]).toHaveTextContent("Node type 'n8n-nodes-base.slack': not available");
 		expect(lines[0]).toHaveTextContent('Blocked for the whole instance');
-		expect(lines[1]).toHaveTextContent("Credential type 'gmailOAuth2': not available");
+		expect(lines[1]).toHaveTextContent(`Credential type '${GMAIL_CREDENTIAL_TYPE}': not available`);
 		expect(lines[1]).toHaveTextContent('Blocked in this project');
 	});
 
@@ -67,6 +68,17 @@ describe('PolicyViolationList', () => {
 
 		expect(getByTestId('policy-violation')).toHaveTextContent("Node type 'Slack': not available");
 		expect(getByTestId('policy-violation')).not.toHaveTextContent(SLACK_NODE_TYPE);
+	});
+
+	it('offers no jump for a credential type, even when the host lists its subject', () => {
+		const { queryByTestId } = renderComponent({
+			props: {
+				violations: [gmailCredentialType],
+				jumpableSubjects: [GMAIL_CREDENTIAL_TYPE],
+			},
+		});
+
+		expect(queryByTestId('policy-violation-jump')).not.toBeInTheDocument();
 	});
 
 	it('renders the message when the violation names no subject', () => {
