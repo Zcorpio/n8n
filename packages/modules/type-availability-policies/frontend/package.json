@@ -27,8 +27,7 @@
     "@n8n/utils": "workspace:*",
     "@vueuse/core": "catalog:frontend",
     "pinia": "catalog:frontend",
-    "vue": "catalog:frontend",
-    "zod": "catalog:"
+    "vue": "catalog:frontend"
   },
   "devDependencies": {
     "@iconify/json": "catalog:",

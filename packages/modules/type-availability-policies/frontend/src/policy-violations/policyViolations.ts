@@ -1,8 +1,7 @@
 import { policyViolationSchema, type PolicyViolation } from '@n8n/api-types';
 import { isRecord } from '@n8n/utils/is-record';
-import { z } from 'zod';
 
-const violationsSchema = z.array(policyViolationSchema).nonempty();
+const violationsSchema = policyViolationSchema.array().nonempty();
 
 /**
  * A refused request carries the violations under `meta`, but a refused manual run is stored on
