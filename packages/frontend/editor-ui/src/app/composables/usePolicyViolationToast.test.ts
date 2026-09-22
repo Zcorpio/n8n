@@ -6,7 +6,9 @@ import { setActivePinia } from 'pinia';
 import type { PolicyViolation } from '@n8n/api-types';
 import { ResponseError } from '@n8n/rest-api-client';
 
-import { createTestNode, createTestWorkflow } from '@/__tests__/mocks';
+import { createTestNode, createTestWorkflow, mockNodeTypeDescription } from '@/__tests__/mocks';
+import { mockedStore } from '@/__tests__/utils';
+import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
 import { canvasEventBus } from '@/features/workflows/canvas/canvas.eventBus';
 import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import {
@@ -53,6 +55,12 @@ function prepareWorkflowWithTwoSlackNodes() {
 	useWorkflowDocumentStore(createWorkflowDocumentId(workflow.id)).hydrate(workflow);
 }
 
+function registerSlackNodeType() {
+	mockedStore(useNodeTypesStore).getNodeType = vi
+		.fn()
+		.mockReturnValue(mockNodeTypeDescription({ name: SLACK_NODE_TYPE, displayName: 'Slack' }));
+}
+
 describe('usePolicyViolationToast', () => {
 	beforeEach(() => {
 		setActivePinia(createTestingPinia({ stubActions: false }));
@@ -61,6 +69,7 @@ describe('usePolicyViolationToast', () => {
 
 	it('shows one toast that jumps to every node of the refused type', async () => {
 		prepareWorkflowWithTwoSlackNodes();
+		registerSlackNodeType();
 		const emitSpy = vi.spyOn(canvasEventBus, 'emit');
 
 		const { showPolicyViolationToast } = usePolicyViolationToast();
@@ -72,6 +81,8 @@ describe('usePolicyViolationToast', () => {
 		expect(toastOptions).toMatchObject({ title: 'Problem saving', type: 'error', duration: 0 });
 
 		const { getByTestId } = render(defineComponent({ render: () => toastOptions.message }));
+		expect(getByTestId('policy-violation')).toHaveTextContent("Node type 'Slack'");
+
 		await userEvent.click(getByTestId('policy-violation-jump'));
 
 		expect(emitSpy).toHaveBeenCalledWith('nodes:select', {

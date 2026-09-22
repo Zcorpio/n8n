@@ -1014,7 +1014,12 @@ describe('manual execution stats tracking', () => {
 				createWorkflowDocumentId(''),
 			);
 
-			expect(mockShowPolicyViolationToast).toHaveBeenCalledWith(error, expect.any(String));
+			// The run handler names the document, so the jump resolves nodes in that workflow.
+			expect(mockShowPolicyViolationToast).toHaveBeenCalledWith(
+				error,
+				expect.any(String),
+				createWorkflowDocumentId(''),
+			);
 			expect(mockShowMessage).not.toHaveBeenCalled();
 		});
 

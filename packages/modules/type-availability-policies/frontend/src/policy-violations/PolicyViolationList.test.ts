@@ -57,6 +57,18 @@ describe('PolicyViolationList', () => {
 		expect(getByTestId('policy-violation')).toHaveTextContent('team');
 	});
 
+	it('renders the display name the host resolved instead of the raw subject', () => {
+		const { getByTestId } = renderComponent({
+			props: {
+				violations: [slackNodeType],
+				subjectLabels: { [SLACK_NODE_TYPE]: 'Slack' },
+			},
+		});
+
+		expect(getByTestId('policy-violation')).toHaveTextContent("Node type 'Slack': not available");
+		expect(getByTestId('policy-violation')).not.toHaveTextContent(SLACK_NODE_TYPE);
+	});
+
 	it('renders the message when the violation names no subject', () => {
 		const { getByTestId } = renderComponent({
 			props: {
