@@ -18,6 +18,8 @@ export interface AssistantMentionItem {
 	workflowName: string;
 	groupId?: string;
 	groupName?: string;
+	nodeTypeName?: string;
+	nodeTypeVersion?: number;
 	description?: string;
 	hasChildren?: boolean;
 	children?: AssistantMentionItem[];

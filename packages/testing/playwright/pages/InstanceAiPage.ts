@@ -140,6 +140,10 @@ export class InstanceAiPage extends BasePage {
 		return this.container.getByRole('textbox').or(this.container.getByRole('combobox'));
 	}
 
+	getComposer(): Locator {
+		return this.container.getByTestId('instance-ai-composer');
+	}
+
 	getSendButton(): Locator {
 		return this.container.getByTestId('instance-ai-send-button');
 	}

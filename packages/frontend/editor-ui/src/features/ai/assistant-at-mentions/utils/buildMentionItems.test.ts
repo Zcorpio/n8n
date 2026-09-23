@@ -70,6 +70,10 @@ describe('buildMentionItems', () => {
 			'Fulfilment',
 			'Node 2',
 		]);
+		expect(items.find(({ entityId }) => entityId === 'node-2')).toMatchObject({
+			nodeTypeName: 'n8n-nodes-base.noOp',
+			nodeTypeVersion: 1,
+		});
 		expect(items.filter(({ entityId }) => entityId === 'node-2')).toHaveLength(1);
 		expect(items.every(({ children, hasChildren }) => !children && !hasChildren)).toBe(true);
 	});

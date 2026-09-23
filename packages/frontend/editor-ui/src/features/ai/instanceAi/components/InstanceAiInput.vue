@@ -829,6 +829,7 @@ const resizable = computed(() => {
 	<div
 		ref="composerRef"
 		:class="$style.composer"
+		data-test-id="instance-ai-composer"
 		@keydown.capture="handleComposerKeydown"
 		@pointerdown.capture="mentions.saveSelection"
 		@click.capture="mentions.handleCaretMove"

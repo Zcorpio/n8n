@@ -2,6 +2,7 @@
 import {
 	N8nDropdownMenu,
 	N8nButton,
+	N8nIcon,
 	N8nIconButton,
 	N8nText,
 	N8nTooltip,
@@ -9,10 +10,13 @@ import {
 	type DropdownMenuItemProps,
 } from '@n8n/design-system';
 import { useI18n } from '@n8n/i18n';
-import { useDebounceFn } from '@vueuse/core';
+import { useDebounceFn, useElementSize } from '@vueuse/core';
+import type { INodeTypeDescription } from 'n8n-workflow';
 import { computed, nextTick, ref, watch } from 'vue';
 
 import { DEBOUNCE_TIME } from '@/app/constants';
+import NodeIcon from '@/app/components/NodeIcon.vue';
+import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
 import { getDebounceTime } from '@n8n/composables/useDebounce';
 
 import type {
@@ -30,6 +34,7 @@ import { buildMentionAttachment } from './utils/buildMentionAttachment';
 
 interface MentionMenuData {
 	item: AssistantMentionItem;
+	nodeType?: INodeTypeDescription | null;
 }
 
 const RETRY_ITEM_PREFIX = 'retry:';
@@ -66,7 +71,13 @@ const emit = defineEmits<{
 }>();
 
 const i18n = useI18n();
+const nodeTypesStore = useNodeTypesStore();
 const dropdownRef = ref<DropdownMenuExposed>();
+const referenceElement = computed(() => props.reference);
+const { width: referenceWidth } = useElementSize(referenceElement);
+const menuWidth = computed(() =>
+	referenceWidth.value > 0 ? `${referenceWidth.value}px` : undefined,
+);
 const artifactIndex = useArtifactMentionIndex({
 	artifacts: () => props.artifacts,
 	activeWorkflowId: () => props.activeWorkflowId,
@@ -112,7 +123,14 @@ function toMenuItem(item: AssistantMentionItem, searchMode: boolean): MentionMen
 	return {
 		id: item.key,
 		label: searchMode ? item.breadcrumbs.join(' > ') : item.label,
-		data: { item },
+		data: {
+			item,
+			...(item.kind === 'node' && item.nodeTypeName
+				? {
+						nodeType: nodeTypesStore.getNodeType(item.nodeTypeName, item.nodeTypeVersion),
+					}
+				: {}),
+		},
 		selectable: item.hasChildren || undefined,
 		children,
 	};
@@ -325,8 +343,11 @@ defineExpose({ handleExternalKeydown });
 		:items="menuItems"
 		:external-focus-target="inputElement"
 		:reference="reference ?? undefined"
+		:width="menuWidth"
+		:extra-popper-class="$style.menuContent"
 		:disabled="disabled"
 		:loading="isLoading"
+		:loading-item-count="10"
 		:empty-text="i18n.baseText('instanceAi.mentions.noResults')"
 		:search-placeholder="i18n.baseText('instanceAi.mentions.searchPlaceholder')"
 		placement="top-start"
@@ -338,11 +359,6 @@ defineExpose({ handleExternalKeydown });
 		@select="handleSelect"
 		@submenu:toggle="handleSubmenuToggle"
 	>
-		<template #loading>
-			<N8nText :class="$style.loadingState" size="small">
-				{{ i18n.baseText('instanceAi.mentions.loadingWorkflows') }}
-			</N8nText>
-		</template>
 		<template v-if="sources.providerErrors.value.size > 0" #empty>
 			<div :class="$style.errorState">
 				<N8nText size="small">{{ i18n.baseText('instanceAi.mentions.loadError') }}</N8nText>
@@ -367,19 +383,38 @@ defineExpose({ handleExternalKeydown });
 				/>
 			</N8nTooltip>
 		</template>
+		<template #item-leading="{ item, ui }">
+			<N8nIcon
+				v-if="item.data?.item.kind === 'workflow'"
+				icon="workflow"
+				size="large"
+				:class="ui.class"
+			/>
+			<N8nIcon
+				v-else-if="item.data?.item.kind === 'group'"
+				icon="layers"
+				size="large"
+				:class="ui.class"
+			/>
+			<NodeIcon
+				v-else-if="item.data?.item.kind === 'node'"
+				:node-type="item.data.nodeType"
+				:size="16"
+				:class="ui.class"
+			/>
+		</template>
 	</N8nDropdownMenu>
 </template>
 
 <style module lang="scss">
+.menuContent {
+	width: var(--n8n--dropdown-menu-width);
+}
+
 .errorState {
 	display: flex;
 	align-items: center;
 	gap: var(--spacing--xs);
-	padding: var(--spacing--xs);
-}
-
-.loadingState {
-	display: block;
 	padding: var(--spacing--xs);
 }
 </style>

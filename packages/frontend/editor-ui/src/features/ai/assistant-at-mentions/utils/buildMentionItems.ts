@@ -54,6 +54,8 @@ function buildNodeMentionItem(
 		entityId: node.id,
 		workflowName: index.workflowName,
 		...(group ? { groupId: group.id, groupName: group.name } : {}),
+		nodeTypeName: node.type,
+		nodeTypeVersion: node.typeVersion,
 	};
 }
 

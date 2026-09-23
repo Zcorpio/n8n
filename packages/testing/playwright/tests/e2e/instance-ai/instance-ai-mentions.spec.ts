@@ -70,6 +70,11 @@ test.describe(
 				await expect(n8n.instanceAi.getMentionMenu()).toBeVisible();
 				await expect(n8n.instanceAi.getMentionMenuItem(workflow.name)).toBeVisible();
 				await expect(input).toBeFocused();
+				const composerBounds = await n8n.instanceAi.getComposer().boundingBox();
+				const menuBounds = await n8n.instanceAi.getMentionMenu().boundingBox();
+				expect(composerBounds).not.toBeNull();
+				expect(menuBounds).not.toBeNull();
+				expect(Math.abs((composerBounds?.width ?? 0) - (menuBounds?.width ?? 0))).toBeLessThan(1);
 
 				const violations = await a11y.check('instance-ai');
 				expect(a11y.scans.at(-1)?.bucket).toBe('instance-ai');

@@ -1,17 +1,37 @@
 import { createTestingPinia } from '@pinia/testing';
 import { setActivePinia } from 'pinia';
 import userEvent from '@testing-library/user-event';
+import { waitFor } from '@testing-library/vue';
+import type { IWorkflowDb } from '@/Interface';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createComponentRenderer } from '@/__tests__/render';
+import { mockedStore } from '@/__tests__/utils';
+import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
 
 import AssistantAtMentionPicker from './AssistantAtMentionPicker.vue';
 import type { AssistantMentionSelection } from './assistantAtMentions.types';
 
+const getWorkflow = vi.hoisted(() => vi.fn());
+
+vi.mock('@/app/api/workflows', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@/app/api/workflows')>()),
+	getWorkflow,
+}));
+
 const renderComponent = createComponentRenderer(AssistantAtMentionPicker);
+
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((resolver) => {
+		resolve = resolver;
+	});
+	return { promise, resolve };
+}
 
 describe('AssistantAtMentionPicker', () => {
 	beforeEach(() => {
+		getWorkflow.mockReset();
 		setActivePinia(createTestingPinia({ stubActions: false }));
 	});
 
@@ -29,8 +49,9 @@ describe('AssistantAtMentionPicker', () => {
 				reference,
 			},
 		});
-
-		await userEvent.click(await findByText('Orders'));
+		const workflowItem = await findByText('Orders');
+		expect(document.querySelector('[data-icon="workflow"]')).toBeVisible();
+		await userEvent.click(workflowItem);
 
 		const selection = (emitted().select as unknown[][] | undefined)?.[0]?.[0] as
 			| AssistantMentionSelection
@@ -90,6 +111,68 @@ describe('AssistantAtMentionPicker', () => {
 		});
 
 		expect(await findByText('No recent workflows')).toBeVisible();
+	});
+
+	it('renders ten skeleton rows while workflows load', async () => {
+		setActivePinia(createTestingPinia());
+		const { useRecentWorkflowsStore } = await import('@/app/stores/recentWorkflows.store');
+		const { useWorkflowsListStore } = await import('@/app/stores/workflowsList.store');
+		const response = deferred<IWorkflowDb[]>();
+		vi.mocked(useRecentWorkflowsStore().resolveRecentWorkflows).mockReturnValue(response.promise);
+		vi.mocked(useWorkflowsListStore().searchWorkflows).mockResolvedValue([]);
+		renderComponent({
+			props: { modelValue: true, query: '', projectId: 'project-1' },
+		});
+
+		await waitFor(() => expect(document.querySelectorAll('.n8n-loading')).toHaveLength(10));
+		expect(document.body).not.toHaveTextContent('Loading workflows');
+		response.resolve([]);
+	});
+
+	it('renders group and resolved node icons in artifact search results', async () => {
+		const input = document.createElement('textarea');
+		const reference = document.createElement('div');
+		document.body.append(input, reference);
+		const nodeTypesStore = mockedStore(useNodeTypesStore);
+		const getNodeType = vi.fn().mockReturnValue({
+			displayName: 'If',
+			name: 'n8n-nodes-base.if',
+			icon: 'fa:map-signs',
+		} as never);
+		nodeTypesStore.getNodeType = getNodeType;
+		getWorkflow.mockResolvedValue({
+			id: 'w1',
+			name: 'Orders',
+			versionId: 'version-1',
+			nodes: [
+				{
+					id: 'if-node',
+					name: 'If',
+					type: 'n8n-nodes-base.if',
+					typeVersion: 2.2,
+					position: [0, 0],
+					parameters: {},
+				},
+			],
+			connections: {},
+			nodeGroups: [{ id: 'group-1', name: 'If checks', nodeIds: ['if-node'] }],
+		} as never);
+
+		const { findByText } = renderComponent({
+			props: {
+				modelValue: true,
+				query: 'if',
+				artifacts: [{ id: 'w1', name: 'Orders' }],
+				inputElement: input,
+				reference,
+			},
+		});
+
+		expect(await findByText('Orders > If checks')).toBeVisible();
+		expect(await findByText('Orders > If checks > If')).toBeVisible();
+		expect(document.querySelector('[data-icon="layers"]')).toBeVisible();
+		expect(document.querySelector('.n8n-node-icon')).toBeVisible();
+		expect(getNodeType).toHaveBeenCalledWith('n8n-nodes-base.if', 2.2);
 	});
 
 	it('shows a retry action when workflow browse fails', async () => {
