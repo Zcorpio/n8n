@@ -53,6 +53,7 @@ const {
 				v-bind="form"
 				data-test-id="auth-form"
 				:button-loading="formLoading"
+				submit-button-variant="brand"
 				@secondary-click="onSecondaryClick"
 				@submit="onSubmit"
 				@update="onUpdate"
