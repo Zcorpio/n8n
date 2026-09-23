@@ -942,6 +942,27 @@ describe('useWorkflowSaving', () => {
 			expect(showPolicyViolationToastSpy).toHaveBeenCalledWith(refusal, 'Problem saving workflow');
 			expect(showMessageSpy).not.toHaveBeenCalled();
 		});
+
+		it('shows the generic error toast when a refused save carries no violations', async () => {
+			const { workflow } = prepareHydratedWorkflow('w-refused-without-violations');
+			workflowsListStore.workflowsById = { [workflow.id]: workflow };
+			setDocumentStoreActive(workflow.id);
+
+			const refusal = new ResponseError('Forbidden', { httpStatusCode: 403 });
+			vi.spyOn(workflowsStore, 'updateWorkflow').mockRejectedValue(refusal);
+
+			const { saveCurrentWorkflow } = useWorkflowSaving({ router });
+
+			expect(await saveCurrentWorkflow({ id: workflow.id })).toBe(false);
+			expect(showPolicyViolationToastSpy).toHaveBeenCalledWith(refusal, 'Problem saving workflow');
+			expect(showMessageSpy).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title: 'Problem saving workflow',
+					message: 'Forbidden',
+					type: 'error',
+				}),
+			);
+		});
 	});
 
 	describe('autoSaveWorkflow', () => {
