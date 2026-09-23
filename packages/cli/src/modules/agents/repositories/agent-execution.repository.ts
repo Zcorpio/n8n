@@ -12,7 +12,7 @@ export type RunningAgentExecution = Pick<
 	'id' | 'threadId' | 'startedAt' | 'updatedAt' | 'timeline'
 >;
 
-type AgentExecutionFinalizationValues = Pick<
+export type AgentExecutionFinalizationValues = Pick<
 	AgentExecution,
 	'status' | 'stoppedAt' | 'duration' | 'timeline' | 'storedAt' | 'error' | 'failureSummary'
 > &
@@ -68,19 +68,23 @@ export class AgentExecutionRepository extends BaseRepository<AgentExecution> {
 	async updateTimelineIfRunning(
 		executionId: string,
 		timeline: AgentExecution['timeline'],
+		ctx: OperationContext,
 	): Promise<boolean> {
-		const result = await this.update({ id: executionId, status: 'running' }, {
-			timeline,
-			updatedAt: new Date(),
-		} as QueryDeepPartialEntity<AgentExecution>);
+		const result = await this.managerFor(ctx).update(
+			AgentExecution,
+			{ id: executionId, status: 'running' },
+			{ timeline, updatedAt: new Date() } as QueryDeepPartialEntity<AgentExecution>,
+		);
 		return result.affected === 1;
 	}
 
 	async updateIfRunning(
 		executionId: string,
 		values: AgentExecutionFinalizationValues,
+		ctx: OperationContext,
 	): Promise<boolean> {
-		const result = await this.update(
+		const result = await this.managerFor(ctx).update(
+			AgentExecution,
 			{ id: executionId, status: 'running' },
 			values as QueryDeepPartialEntity<AgentExecution>,
 		);

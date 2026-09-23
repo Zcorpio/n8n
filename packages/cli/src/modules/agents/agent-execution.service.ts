@@ -47,6 +47,7 @@ import { AgentExecutionThreadRepository } from './repositories/agent-execution-t
 import type { AgentExecutionThreadMetadata } from './repositories/agent-execution-thread.repository';
 import {
 	AgentExecutionRepository,
+	type AgentExecutionFinalizationValues,
 	type RunningAgentExecution,
 } from './repositories/agent-execution.repository';
 import {
@@ -339,20 +340,25 @@ export class AgentExecutionService {
 		const duration = execution.startedAt
 			? Math.max(0, stoppedAt.getTime() - execution.startedAt.getTime())
 			: 0;
-		const finalized = await this.agentExecutionRepository.updateIfRunning(execution.id, {
-			status: 'interrupted',
-			stoppedAt,
-			duration,
-			timeline: timeline.length > 0 ? timeline : null,
-			storedAt: 'db',
-			error,
-			failureSummary: computeExecutionFailureSummary({
-				timeline,
+		// The execution of another turn: not fenced by a lease of this turn.
+		const finalized = await this.agentExecutionRepository.updateIfRunning(
+			execution.id,
+			{
 				status: 'interrupted',
+				stoppedAt,
+				duration,
+				timeline: timeline.length > 0 ? timeline : null,
+				storedAt: 'db',
 				error,
-				stoppedAt: stoppedAt.getTime(),
-			}),
-		});
+				failureSummary: computeExecutionFailureSummary({
+					timeline,
+					status: 'interrupted',
+					error,
+					stoppedAt: stoppedAt.getTime(),
+				}),
+			},
+			{},
+		);
 		if (finalized) void this.notifyInterruptedExecution(execution);
 		return finalized;
 	}
@@ -749,7 +755,7 @@ export class AgentExecutionService {
 	): Promise<void> {
 		const { record, hitlStatus } = params;
 		await this.timelineSnapshotWrites.get(executionId);
-		const finalized = await this.agentExecutionRepository.updateIfRunning(executionId, {
+		const values: AgentExecutionFinalizationValues = {
 			status,
 			stoppedAt,
 			duration: record.duration,
@@ -763,11 +769,15 @@ export class AgentExecutionService {
 			error: record.error,
 			failureSummary,
 			hitlStatus: hitlStatus ?? null,
-		});
+		};
+		// Throws `AgentSessionLeaseLostError` when another turn owns the session.
+		const finalized = await this.sessionLeases.fencedWriteFor(
+			params.threadId,
+			executionId,
+			{},
+			async (ctx) => await this.agentExecutionRepository.updateIfRunning(executionId, values, ctx),
+		);
 		if (finalized) return;
-		if (this.sessionLeases.isLost(params.threadId, executionId)) {
-			throw new AgentSessionLeaseLostError();
-		}
 		throw new OperationalError('Agent execution is no longer running', {
 			extra: { executionId },
 		});
@@ -797,12 +807,18 @@ export class AgentExecutionService {
 		snapshot: Omit<TimelineSnapshotParams, 'executionId'>,
 	): Promise<boolean> {
 		try {
-			if (
-				!(await this.agentExecutionRepository.updateTimelineIfRunning(
-					executionId,
-					snapshot.timeline,
-				))
-			) {
+			const written = await this.sessionLeases.fencedWriteFor(
+				snapshot.threadId,
+				executionId,
+				{},
+				async (ctx) =>
+					await this.agentExecutionRepository.updateTimelineIfRunning(
+						executionId,
+						snapshot.timeline,
+						ctx,
+					),
+			);
+			if (!written) {
 				this.pendingTimelineSnapshots.delete(executionId);
 				return false;
 			}
@@ -813,6 +829,8 @@ export class AgentExecutionService {
 				executionId,
 			});
 		} catch (error) {
+			// A lost lease is final: another turn owns the session now.
+			if (error instanceof AgentSessionLeaseLostError) return false;
 			if (!this.heartbeatTimers.has(executionId)) return false;
 			if (!this.pendingTimelineSnapshots.has(executionId)) {
 				this.pendingTimelineSnapshots.set(executionId, snapshot);

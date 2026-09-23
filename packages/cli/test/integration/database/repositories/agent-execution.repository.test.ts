@@ -45,6 +45,7 @@ import {
 import { AgentSessionLeaseService } from '@/modules/agents/agent-session-lease.service';
 import type { AgentExecutionUpdateBroadcaster } from '@/modules/agents/agent-execution-update-broadcaster';
 import { AgentInterruptedExecutionSweeper } from '@/modules/agents/agent-interrupted-execution-sweeper';
+import { AgentSessionLeaseLostError } from '@/modules/agents/agent-session-lease-lost.error';
 import { AgentTurnAlreadyRunningError } from '@/modules/agents/agent-turn-already-running.error';
 import { AgentTurnExecutionService } from '@/modules/agents/agent-turn-execution.service';
 import type { AgentBackgroundJobService } from '@/modules/agents/background/agent-background-job.service';
@@ -70,6 +71,8 @@ import { createMember, createAdmin } from '../../shared/db/users';
 const { TypeOrmTransaction, TypeOrmTransactionRunner } = createRequire(__filename)(
 	'@n8n/db/dist/services/typeorm-transaction',
 ) as typeof import('@n8n/db/dist/services/typeorm-transaction');
+
+const isPostgres = process.env.DB_TYPE === 'postgresdb';
 
 describe('AgentExecutionRepository', () => {
 	let repository: AgentExecutionRepository;
@@ -1007,12 +1010,87 @@ describe('AgentExecutionRepository', () => {
 					...params,
 					record: finishedRecord(),
 				}),
-			).rejects.toThrow('Agent execution is no longer running');
+			).rejects.toBeInstanceOf(AgentSessionLeaseLostError);
 			await remote.executionService.finalizeExecution(takeover.executionId, {
 				...params,
 				record: finishedRecord(),
 			});
 		});
+
+		it('rejects the timeline and terminal writes of a turn whose lease another main took over', async () => {
+			const thread = await createThread();
+			const params = startParams(thread.id);
+			const local = recordingServices();
+			const remote = recordingServices(mock(), peer);
+			const stale = await local.executionService.startExecutionRecording(params, new Date());
+			const leases = new AgentSessionLeaseRepository(repository.manager.connection, local.txRunner);
+			await leases.update({ threadId: thread.id }, { expiresAt: new Date(Date.now() - 60_000) });
+			const takeover = await remote.executionService.startExecutionRecording(params, new Date());
+
+			local.executionService.recordTimelineSnapshot({
+				executionId: stale.executionId,
+				projectId,
+				agentId,
+				threadId: thread.id,
+				timeline: [{ type: 'text', content: 'Stale output', timestamp: 1 }],
+			});
+
+			// The failed fence check marks the lease lost and aborts the stale turn.
+			await vi.waitFor(() => expect(stale.leaseSignal.aborted).toBe(true));
+			await expect(
+				local.executionService.finalizeExecution(stale.executionId, {
+					...params,
+					record: finishedRecord(),
+				}),
+			).rejects.toBeInstanceOf(AgentSessionLeaseLostError);
+			expect(await repository.findOneByOrFail({ id: stale.executionId })).toMatchObject({
+				status: 'interrupted',
+				timeline: null,
+			});
+			await remote.executionService.finalizeExecution(takeover.executionId, {
+				...params,
+				record: finishedRecord(),
+			});
+		});
+
+		it.skipIf(!isPostgres)(
+			'finalizes a turn while another start waits for its lease without a deadlock',
+			async () => {
+				const thread = await createThread();
+				const params = startParams(thread.id);
+				const local = recordingServices();
+				const remote = recordingServices(mock(), peer);
+				const started = await local.executionService.startExecutionRecording(params, new Date());
+				const updateIfRunning = repository.updateIfRunning.bind(repository);
+				const writing = createDeferredPromise();
+				const commitWrite = createDeferredPromise();
+				const update = vi
+					.spyOn(repository, 'updateIfRunning')
+					.mockImplementation(async (executionId, values, ctx) => {
+						writing.resolve();
+						await commitWrite.promise;
+						return await updateIfRunning(executionId, values, ctx);
+					});
+				try {
+					const finalizing = local.executionService.finalizeExecution(started.executionId, {
+						...params,
+						record: finishedRecord(),
+					});
+					await writing.promise;
+					// Locks the thread row, then waits for the share lock of the terminal write.
+					const competing = expect(
+						remote.executionService.startExecutionRecording(params, new Date()),
+					).rejects.toBeInstanceOf(AgentTurnAlreadyRunningError);
+					await new Promise((resolve) => setTimeout(resolve, 200));
+					commitWrite.resolve();
+
+					await expect(finalizing).resolves.toBe(started.executionId);
+					await competing;
+				} finally {
+					update.mockRestore();
+				}
+			},
+		);
 	});
 
 	it.each([false, true])(

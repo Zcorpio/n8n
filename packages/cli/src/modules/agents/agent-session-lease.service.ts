@@ -162,11 +162,6 @@ export class AgentSessionLeaseService {
 		}
 	}
 
-	isLost(threadId: string, executionId: string): boolean {
-		const lease = this.findHeld(threadId, executionId);
-		return lease?.controller.signal.reason instanceof AgentSessionLeaseLostError;
-	}
-
 	/** Frees the lease. Never throws: a lease that cannot be freed expires. */
 	async release(threadId: string, executionId: string): Promise<void> {
 		const lease = this.findHeld(threadId, executionId);

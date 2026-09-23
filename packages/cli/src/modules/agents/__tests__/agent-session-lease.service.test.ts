@@ -82,7 +82,6 @@ describe('AgentSessionLeaseService', () => {
 
 		expect(signal.aborted).toBe(true);
 		expect(signal.reason).toBeInstanceOf(AgentSessionLeaseLostError);
-		expect(service.isLost(request.threadId, request.executionId)).toBe(true);
 	});
 
 	it('counts a renewal that is still in progress at the next heartbeat as failed', async () => {
