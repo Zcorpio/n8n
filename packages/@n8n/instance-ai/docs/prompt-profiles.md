@@ -28,8 +28,12 @@ prompt cache within one instance. Profiles are keyed by build mode, so pinning a
 unknown pin stops the instance at startup instead of silently serving the
 default profile.
 
-Internal follow-ups retain the selected version. Checkpoints store it in
-`persistence.hostMetadata.promptVersion`. If that version is no longer registered
+Internal follow-ups retain the selected version. Checkpoints store the request
+pin in `persistence.hostMetadata.promptVersion`. They do not store the operator
+pin or the experiment assignment, so a resumed run derives those again. Change
+or remove `N8N_INSTANCE_AI_PROMPT_VERSION` while a run is suspended, and the
+resumed run uses the new value. Build mode differs: the checkpoint stores it and
+recovery restores it exactly. If a stored version is no longer registered
 after deployment, recovery selects the default profile and records `fallbackFrom`.
 Legacy checkpoints use their saved mode, or default when no valid mode exists.
 An unknown explicit request pin is rejected instead of silently falling back.
