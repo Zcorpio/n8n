@@ -85,6 +85,7 @@ function buildGroupMentionItem(
 		workflowName: index.workflowName,
 		groupId: group.id,
 		groupName: group.name,
+		nodeCount: group.nodeIds.length,
 		...(includeChildren
 			? { hasChildren: group.nodeIds.length > 0, ...(children ? { children } : {}) }
 			: {}),
@@ -118,6 +119,7 @@ function buildArtifactWorkflowItem(
 		workflowId: artifact.id,
 		entityId: artifact.id,
 		workflowName,
+		...(index ? { nodeCount: index.nodes.length } : {}),
 		...(includeChildren
 			? { hasChildren: index ? Boolean(children?.length) : true, ...(children ? { children } : {}) }
 			: {}),

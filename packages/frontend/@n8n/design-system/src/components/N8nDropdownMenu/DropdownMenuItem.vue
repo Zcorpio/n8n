@@ -44,7 +44,7 @@ const props = withDefaults(
 		searchMode: 'internal',
 	},
 );
-defineSlots<DropdownMenuItemSlots<T, D>>();
+const slots = defineSlots<DropdownMenuItemSlots<T, D>>();
 
 const emit = defineEmits<{
 	select: [value: T];
@@ -318,6 +318,21 @@ onBeforeUnmount(() => {
 					data-sub-menu-action="open"
 					@click.stop="handleSubMenuIndicatorClick"
 				>
+					<slot
+						v-if="slots['item-trailing']"
+						name="item-trailing"
+						:item="props"
+						:ui="trailingProps"
+					/>
+					<Icon
+						icon="chevron-right"
+						:class="$style['sub-indicator']"
+						:color="disabled ? 'text-xlight' : 'text-light'"
+						size="large"
+					/>
+				</span>
+				<span v-else-if="slots['item-trailing']" :class="$style['sub-indicator-action']">
+					<slot name="item-trailing" :item="props" :ui="trailingProps" />
 					<Icon
 						icon="chevron-right"
 						:class="$style['sub-indicator']"
@@ -634,10 +649,13 @@ onBeforeUnmount(() => {
 
 .sub-indicator-action {
 	display: flex;
+	align-items: center;
+	gap: var(--spacing--2xs);
 	flex-shrink: 0;
 	margin-left: auto;
 }
 
+.sub-indicator-action .item-trailing,
 .sub-indicator-action .sub-indicator {
 	margin-left: 0;
 }

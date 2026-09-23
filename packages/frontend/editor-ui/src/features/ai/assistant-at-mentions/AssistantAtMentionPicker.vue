@@ -403,12 +403,51 @@ defineExpose({ handleExternalKeydown });
 				:class="ui.class"
 			/>
 		</template>
+		<template #item-label="{ item, ui }">
+			<N8nText :class="ui.class" :title="item.label" size="medium" color="text-dark">
+				<template v-if="query.trim() && item.data?.item">
+					<template
+						v-for="(breadcrumb, index) in item.data.item.breadcrumbs"
+						:key="`${item.id}:${index}`"
+					>
+						<span
+							:class="{
+								[$style.breadcrumbAncestor]: index < item.data.item.breadcrumbs.length - 1,
+							}"
+						>
+							{{ breadcrumb }}
+						</span>
+						<span
+							v-if="index < item.data.item.breadcrumbs.length - 1"
+							:class="$style.breadcrumbAncestor"
+						>
+							&gt;
+						</span>
+					</template>
+				</template>
+				<template v-else>{{ item.label }}</template>
+			</N8nText>
+		</template>
+		<template #item-trailing="{ item, ui }">
+			<N8nText
+				v-if="item.data?.item.hasChildren && item.data.item.nodeCount !== undefined"
+				:class="ui.class"
+				size="small"
+				color="text-light"
+			>
+				{{ item.data.item.nodeCount }}
+			</N8nText>
+		</template>
 	</N8nDropdownMenu>
 </template>
 
 <style module lang="scss">
 .menuContent {
 	width: var(--n8n--dropdown-menu-width);
+}
+
+.breadcrumbAncestor {
+	color: var(--color--text--tint-1);
 }
 
 .errorState {

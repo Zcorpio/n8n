@@ -44,6 +44,7 @@ describe('buildMentionItems', () => {
 		);
 
 		expect(workflow.label).toBe('Order processing');
+		expect(workflow.nodeCount).toBe(3);
 		expect(workflow.children?.map(({ kind, label }) => [kind, label])).toEqual([
 			['group', 'Fulfilment'],
 			['node', 'Node 1'],
@@ -52,6 +53,7 @@ describe('buildMentionItems', () => {
 			'Node 2',
 			'Node 3',
 		]);
+		expect(workflow.children?.[0].nodeCount).toBe(2);
 	});
 
 	it('builds flat items with workflow and group breadcrumbs', () => {

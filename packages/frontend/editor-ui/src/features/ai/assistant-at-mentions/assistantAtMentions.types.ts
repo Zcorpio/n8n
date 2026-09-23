@@ -20,6 +20,7 @@ export interface AssistantMentionItem {
 	groupName?: string;
 	nodeTypeName?: string;
 	nodeTypeVersion?: number;
+	nodeCount?: number;
 	description?: string;
 	hasChildren?: boolean;
 	children?: AssistantMentionItem[];

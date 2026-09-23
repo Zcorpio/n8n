@@ -515,5 +515,20 @@ describe('N8nDropdownMenuItem', () => {
 				expect(customTrailing).toBeInTheDocument();
 			});
 		});
+
+		it('should render custom item-trailing slot on a sub-menu parent', async () => {
+			renderMenuItem(
+				{ id: 'parent', label: 'Parent', children: [{ id: 'child', label: 'Child' }] },
+				{
+					slots: {
+						'item-trailing': '<span data-test-id="submenu-trailing">2</span>',
+					},
+				},
+			);
+
+			await waitFor(() => {
+				expect(document.querySelector('[data-test-id="submenu-trailing"]')).toHaveTextContent('2');
+			});
+		});
 	});
 });

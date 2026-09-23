@@ -158,7 +158,7 @@ describe('AssistantAtMentionPicker', () => {
 			nodeGroups: [{ id: 'group-1', name: 'If checks', nodeIds: ['if-node'] }],
 		} as never);
 
-		const { findByText } = renderComponent({
+		const { findByRole } = renderComponent({
 			props: {
 				modelValue: true,
 				query: 'if',
@@ -168,11 +168,73 @@ describe('AssistantAtMentionPicker', () => {
 			},
 		});
 
-		expect(await findByText('Orders > If checks')).toBeVisible();
-		expect(await findByText('Orders > If checks > If')).toBeVisible();
-		expect(document.querySelector('[data-icon="layers"]')).toBeVisible();
-		expect(document.querySelector('.n8n-node-icon')).toBeVisible();
+		const groupResult = await findByRole('menuitem', { name: 'Orders > If checks' });
+		const nodeResult = await findByRole('menuitem', { name: 'Orders > If checks > If' });
+		expect(groupResult.querySelector('[data-icon="layers"]')).toBeVisible();
+		expect(nodeResult.querySelector('.n8n-node-icon')).toBeVisible();
+		expect(
+			[...nodeResult.querySelectorAll('[class*="breadcrumbAncestor"]')].map((element) =>
+				element.textContent?.trim(),
+			),
+		).toEqual(['Orders', '>', 'If checks', '>']);
 		expect(getNodeType).toHaveBeenCalledWith('n8n-nodes-base.if', 2.2);
+	});
+
+	it('shows node counts next to expandable workflow and group chevrons', async () => {
+		const input = document.createElement('textarea');
+		const reference = document.createElement('div');
+		document.body.append(input, reference);
+		getWorkflow.mockResolvedValue({
+			id: 'w1',
+			name: 'Orders',
+			versionId: 'version-1',
+			nodes: [
+				{
+					id: 'node-1',
+					name: 'First',
+					type: 'n8n-nodes-base.noOp',
+					typeVersion: 1,
+					position: [0, 0],
+					parameters: {},
+				},
+				{
+					id: 'node-2',
+					name: 'Second',
+					type: 'n8n-nodes-base.noOp',
+					typeVersion: 1,
+					position: [0, 0],
+					parameters: {},
+				},
+				{
+					id: 'node-3',
+					name: 'Third',
+					type: 'n8n-nodes-base.noOp',
+					typeVersion: 1,
+					position: [0, 0],
+					parameters: {},
+				},
+			],
+			connections: {},
+			nodeGroups: [{ id: 'group-1', name: 'Review group', nodeIds: ['node-1', 'node-2'] }],
+		} as never);
+
+		const { findByText } = renderComponent({
+			props: {
+				modelValue: true,
+				query: '',
+				artifacts: [{ id: 'w1', name: 'Orders' }],
+				inputElement: input,
+				reference,
+			},
+		});
+		const workflowRow = (await findByText('Orders')).closest('[role="menuitem"]');
+		const workflowOpenAction = workflowRow?.querySelector('[data-sub-menu-action="open"]');
+		expect(workflowOpenAction).not.toBeNull();
+		await userEvent.click(workflowOpenAction as HTMLElement);
+
+		const groupRow = (await findByText('Review group')).closest('[role="menuitem"]');
+		expect(workflowOpenAction).toHaveTextContent('3');
+		expect(groupRow?.querySelector('[data-sub-menu-action="open"]')).toHaveTextContent('2');
 	});
 
 	it('shows a retry action when workflow browse fails', async () => {
