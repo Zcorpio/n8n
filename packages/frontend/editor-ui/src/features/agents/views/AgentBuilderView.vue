@@ -39,6 +39,7 @@ import { useUIStore } from '@/app/stores/ui.store';
 import { usePushConnectionStore } from '@/app/stores/pushConnection.store';
 import { useFavoritesStore } from '@/app/stores/favorites.store';
 import { useDocumentTitle } from '@/app/composables/useDocumentTitle';
+import { useKeybindings } from '@/app/composables/useKeybindings';
 import { MODAL_CONFIRM } from '@/app/constants';
 import { AGENT_EXTERNAL_UPDATE_NOTICE_DURATION, TIME } from '@/app/constants/durations';
 import { deepCopy } from 'n8n-workflow';
@@ -2314,6 +2315,17 @@ function onSwitchAgent(nextAgentId: string) {
 		query: isStandalonePreview.value ? {} : query,
 	});
 }
+
+useKeybindings({
+	ctrl_j: {
+		disabled: () => !instanceAiAvailable,
+		run: () => {
+			isAiPanelOpen.value = !isAiPanelOpen.value;
+		},
+		/** Enables closing with command whilst panel input is focused */
+		allowInInputs: true,
+	},
+});
 </script>
 
 <template>
@@ -2420,6 +2432,7 @@ function onSwitchAgent(nextAgentId: string) {
 					:width="aiPanelWidth"
 					:min-width="320"
 					:max-width="720"
+					:default-width="460"
 					:supported-directions="['right']"
 					@resize="onAiPanelResize"
 				>
