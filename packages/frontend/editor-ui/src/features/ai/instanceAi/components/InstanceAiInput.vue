@@ -982,6 +982,10 @@ const resizable = computed(() => {
 	flex-wrap: wrap;
 	align-items: center;
 	gap: var(--spacing--2xs);
+
+	> * {
+		max-width: 80%;
+	}
 }
 
 :global(.suggestions-fade-enter-active) {
