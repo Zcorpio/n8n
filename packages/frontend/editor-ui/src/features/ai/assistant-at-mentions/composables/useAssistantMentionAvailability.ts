@@ -42,7 +42,7 @@ export function useAssistantMentionAvailability(options: {
 				projectId,
 				isArchived: false,
 				select: ['id'],
-				options: { take: 1, skip: 0, includeScopes: false },
+				options: { take: 1, skip: 0, sortBy: 'id:asc', includeScopes: false },
 			});
 			if (generation === requestGeneration) hasSavedWorkflow.value = workflows.length > 0;
 		} catch {

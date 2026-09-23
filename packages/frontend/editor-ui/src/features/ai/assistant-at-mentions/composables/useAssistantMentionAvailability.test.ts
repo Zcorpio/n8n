@@ -42,7 +42,7 @@ describe('useAssistantMentionAvailability', () => {
 			projectId: 'project-1',
 			isArchived: false,
 			select: ['id'],
-			options: { take: 1, skip: 0, includeScopes: false },
+			options: { take: 1, skip: 0, sortBy: 'id:asc', includeScopes: false },
 		});
 		scope.stop();
 	});
