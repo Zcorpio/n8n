@@ -92,7 +92,10 @@ interface WorkflowAgentStreamParams {
 	recordingParams?: StartExecutionParams;
 	streamObserver?: WorkflowAgentStreamObserver;
 	sandboxScope?: { projectId: string; principalHash: AgentSandboxPrincipalHash };
-	/** The turn that holds the session lease. Only recorded runs have one. */
+	/**
+	 * The turn that holds the session lease. Only recorded runs have one, and
+	 * only while the message queue flag is on.
+	 */
 	turn?: { threadId: string; executionId: string; leaseSignal: AbortSignal };
 }
 
@@ -378,17 +381,20 @@ export class AgentWorkflowExecutionService {
 		const options = await this.getWorkflowStreamOptions(params, hasParentContext, stopRun.signal);
 		state.executionStarted = true;
 		const startRun = async () => await params.agentInstance.stream(params.message, options);
-		// A recorded run is a turn, so its writes are fenced by the session lease.
+		// A leased run is a turn, so its writes are fenced by the session lease.
 		const resultStream = params.turn
 			? await this.sessionLeases.runInTurn(params.turn.threadId, params.turn.executionId, startRun)
 			: await startRun();
-		const stopOnEarlyExit = {
-			abortRun: () => stopRun.abort(),
-			// The error that stopped the consumer is recorded as the execution error.
-			onDrainedChunk: (chunk: StreamChunk) => {
-				if (chunk.type !== 'error') recorder.record(chunk);
-			},
-		};
+		// Only a leased run stops before its lease is released. Other runs cancel the stream.
+		const stopOnEarlyExit = params.turn
+			? {
+					abortRun: () => stopRun.abort(),
+					// The error that stopped the consumer is recorded as the execution error.
+					onDrainedChunk: (chunk: StreamChunk) => {
+						if (chunk.type !== 'error') recorder.record(chunk);
+					},
+				}
+			: undefined;
 		for await (const value of streamAgentChunks(resultStream.stream, stopOnEarlyExit)) {
 			this.recordWorkflowChunk(value, params.outputSchema, recorder, state);
 			await streamAdapter.observe(value);
@@ -508,11 +514,14 @@ export class AgentWorkflowExecutionService {
 				{ waitMs: WORKFLOW_NODE_SESSION_WAIT_MS },
 			);
 			agentExecutionId = started.executionId;
-			turn = {
-				threadId: recordingParams.threadId,
-				executionId: started.executionId,
-				leaseSignal: started.leaseSignal,
-			};
+			// TODO(AGENT-1031): Always set the turn when the message queue flag is removed.
+			if (started.leaseSignal) {
+				turn = {
+					threadId: recordingParams.threadId,
+					executionId: started.executionId,
+					leaseSignal: started.leaseSignal,
+				};
+			}
 		}
 
 		const { structuredOutput, toolCalls, streamError, executionError, executionStarted } =

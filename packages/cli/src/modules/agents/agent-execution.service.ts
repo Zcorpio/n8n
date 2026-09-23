@@ -771,10 +771,9 @@ export class AgentExecutionService {
 			hitlStatus: hitlStatus ?? null,
 		};
 		// Throws `AgentSessionLeaseLostError` when another turn owns the session.
-		const finalized = await this.sessionLeases.fencedWriteFor(
+		const finalized = await this.writeForTurn(
 			params.threadId,
 			executionId,
-			{},
 			async (ctx) => await this.agentExecutionRepository.updateIfRunning(executionId, values, ctx),
 		);
 		if (finalized) return;
@@ -802,15 +801,28 @@ export class AgentExecutionService {
 		}
 	}
 
+	// TODO(AGENT-1031): Always fence the write when the message queue flag is removed.
+	/**
+	 * Writes a record of the turn in the fence of its session lease. With the
+	 * message queue flag off, the turn holds no lease, so the write is not fenced.
+	 */
+	private async writeForTurn<T>(
+		threadId: string,
+		executionId: string,
+		write: (ctx: OperationContext) => Promise<T>,
+	): Promise<T> {
+		if (!this.agentsConfig.messageQueueEnabled) return await write({});
+		return await this.sessionLeases.fencedWriteFor(threadId, executionId, {}, write);
+	}
+
 	private async writeTimelineSnapshot(
 		executionId: string,
 		snapshot: Omit<TimelineSnapshotParams, 'executionId'>,
 	): Promise<boolean> {
 		try {
-			const written = await this.sessionLeases.fencedWriteFor(
+			const written = await this.writeForTurn(
 				snapshot.threadId,
 				executionId,
-				{},
 				async (ctx) =>
 					await this.agentExecutionRepository.updateTimelineIfRunning(
 						executionId,

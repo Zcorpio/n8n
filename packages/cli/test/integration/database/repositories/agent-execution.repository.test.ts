@@ -500,9 +500,13 @@ describe('AgentExecutionRepository', () => {
 		}).initialize();
 		try {
 			const otherStorage = new N8NCheckpointStorage(
-				new AgentCheckpointRepository(secondConnection),
+				new AgentCheckpointRepository(
+					secondConnection,
+					new TypeOrmTransactionRunner(secondConnection, mockLogger()),
+				),
 				mockLogger(),
 				new AgentsConfig(),
+				Container.get(AgentSessionLeaseService),
 			);
 			const bothLoaded = createDeferredPromise<boolean>();
 			let loaded = 0;
@@ -1047,7 +1051,7 @@ describe('AgentExecutionRepository', () => {
 			});
 
 			// The failed fence check marks the lease lost and aborts the stale turn.
-			await vi.waitFor(() => expect(stale.leaseSignal.aborted).toBe(true));
+			await vi.waitFor(() => expect(stale.leaseSignal?.aborted).toBe(true));
 			await expect(
 				local.executionService.finalizeExecution(stale.executionId, {
 					...params,

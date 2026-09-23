@@ -532,6 +532,49 @@ describe('AgentWorkflowExecutionService', () => {
 		);
 	});
 
+	it('runs a recorded run without a lease outside the turn scope and cancels its stream when the observer fails', async () => {
+		const { service, agentRepository, reconstructionService, executionService, sessionLeases } =
+			makeService();
+		executionService.startExecutionRecording.mockResolvedValue({ executionId: 'execution-1' });
+		const cancel = vi.fn();
+		const runtime = makeRuntime();
+		runtime.agent.stream.mockResolvedValue({
+			runId: 'runtime-run-1',
+			stream: new ReadableStream<StreamChunk>({
+				start(controller) {
+					controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial' });
+				},
+				cancel,
+			}),
+		});
+		agentRepository.findByIdAndProjectId.mockResolvedValue(makeAgent());
+		reconstructionService.reconstructFromAgentEntity.mockResolvedValue(runtime);
+		const streamObserver = vi
+			.fn<WorkflowAgentStreamObserver>()
+			.mockRejectedValue(new Error('response stream closed'));
+
+		await expect(
+			service.executeForWorkflow(
+				agentId,
+				'hello',
+				'execution-1',
+				'thread-1',
+				projectId,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				streamObserver,
+			),
+		).rejects.toThrow('response stream closed');
+
+		const [, streamOptions] = runtime.agent.stream.mock.calls[0];
+		expect(sessionLeases.runInTurn).not.toHaveBeenCalled();
+		expect(streamOptions.abortSignal?.aborted).toBe(false);
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
 	it('records a workflow initialization failure without invoking the SDK', async () => {
 		const { service, agentRepository, reconstructionService, executionService } = makeService();
 		agentRepository.findByIdAndProjectId.mockResolvedValue(makeAgent());

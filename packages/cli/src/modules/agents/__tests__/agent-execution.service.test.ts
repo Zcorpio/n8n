@@ -293,6 +293,9 @@ describe('AgentExecutionService', () => {
 			for (const { executionId } of [first, second]) {
 				await service.finalizeExecution(executionId, { ...params, record: makeMessageRecord() });
 			}
+			// Without a lease, the records of the turn are written without the fence.
+			expect(sessionLeases.fencedWriteFor).not.toHaveBeenCalled();
+			expect(agentExecutionRepository.updateIfRunning).toHaveBeenCalledTimes(2);
 		});
 
 		it('rejects the turn inside the recording transaction when another turn holds the session', async () => {

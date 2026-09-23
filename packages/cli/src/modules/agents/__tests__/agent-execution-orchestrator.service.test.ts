@@ -1200,6 +1200,29 @@ describe('AgentExecutionOrchestratorService', () => {
 				}),
 			);
 		});
+
+		it('runs a turn without a lease outside the turn scope and cancels its stream on an early exit', async () => {
+			const { service, executionService, sessionLeases } = makeService();
+			executionService.startExecutionRecording.mockResolvedValue({ executionId: 'execution-1' });
+			const cancel = vi.fn();
+			const runtime = makeRuntime();
+			runtime.agent.stream.mockResolvedValue({
+				runId: 'runtime-run-1',
+				stream: new ReadableStream<StreamChunk>({
+					start(controller) {
+						controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial' });
+					},
+					cancel,
+				}),
+			});
+
+			for await (const _chunk of streamChat(service, runtime)) break;
+
+			const [, streamOptions] = runtime.agent.stream.mock.calls[0];
+			expect(sessionLeases.runInTurn).not.toHaveBeenCalled();
+			expect(streamOptions.abortSignal?.aborted).toBe(false);
+			expect(cancel).toHaveBeenCalledOnce();
+		});
 	});
 
 	const genieResult: StreamChunk = {

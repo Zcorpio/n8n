@@ -1003,6 +1003,43 @@ describe('SubAgentRunner', () => {
 		);
 	});
 
+	it('runs a child without a lease outside the turn scope and cancels its stream when the parent stops', async () => {
+		agentExecutionService.startExecutionRecording.mockResolvedValue({
+			executionId: 'agent-execution-1',
+		});
+		const chunkError = new Error('parent stream closed');
+		const cancel = vi.fn();
+		childAgent.stream.mockImplementation(async () => ({
+			runId: 'child-run-1',
+			stream: new ReadableStream<StreamChunk>({
+				start(controller) {
+					controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial' });
+				},
+				cancel,
+			}),
+			getState: () => {
+				throw new Error('not implemented');
+			},
+		}));
+
+		await expect(
+			runner.run(spawnRequest, {
+				parentAgentId,
+				projectId,
+				credentialProvider,
+				runType: 'production',
+				onChunk: () => {
+					throw chunkError;
+				},
+			}),
+		).rejects.toBe(chunkError);
+
+		const options = childAgent.stream.mock.calls[0]?.[1];
+		expect(sessionLeases.runInTurn).not.toHaveBeenCalled();
+		expect(options?.abortSignal?.aborted).toBe(false);
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
 	it('derives sub-agent telemetry from the parent context and passes it to the child stream', async () => {
 		const parentTelemetry: BuiltTelemetry = {
 			enabled: true,
