@@ -2,9 +2,14 @@ import { createTeamProject, mockLogger, testDb, testModules } from '@n8n/backend
 import type { OperationContext } from '@n8n/db';
 import { Container } from '@n8n/di';
 import { DataSource } from '@n8n/typeorm';
+import { createDeferredPromise } from '@n8n/utils/promise/deferred-promise';
+import type { InstanceSettings } from 'n8n-core';
 import { createRequire } from 'node:module';
 import { v4 as uuid } from 'uuid';
+import { mock } from 'vitest-mock-extended';
 
+import { AgentSessionLeaseLostError } from '@/modules/agents/agent-session-lease-lost.error';
+import { AgentSessionLeaseService } from '@/modules/agents/agent-session-lease.service';
 import type { Agent } from '@/modules/agents/entities/agent.entity';
 import { AgentExecutionThreadRepository } from '@/modules/agents/repositories/agent-execution-thread.repository';
 import {
@@ -19,6 +24,8 @@ const { TypeOrmTransactionRunner } = createRequire(__filename)(
 ) as typeof import('@n8n/db/dist/services/typeorm-transaction');
 
 const TTL_MS = 60_000;
+
+const isPostgres = process.env.DB_TYPE === 'postgresdb';
 
 describe('AgentSessionLeaseRepository', () => {
 	let agentRepo: AgentRepository;
@@ -187,5 +194,96 @@ describe('AgentSessionLeaseRepository', () => {
 
 		await agentRepo.delete({ id: agentId });
 		expect(await repository.findOneBy({ threadId })).toBeNull();
+	});
+
+	describe('fenced writes', () => {
+		function sessionsOn(connection: DataSource, hostId: string) {
+			const txRunner = new TypeOrmTransactionRunner(connection, mockLogger());
+			const repository = new AgentSessionLeaseRepository(connection, txRunner);
+			const service = new AgentSessionLeaseService(
+				mockLogger(),
+				repository,
+				mock<InstanceSettings>({ hostId }),
+				txRunner,
+			);
+			const startTurn = async (threadId: string, executionId = uuid()) => {
+				const grant = await txRunner.run(
+					{},
+					async (ctx: OperationContext) =>
+						await service.acquire({ threadId, agentId, executionId }, ctx),
+				);
+				return { executionId, signal: service.hold(grant) };
+			};
+			const writeInTurn = async <T>(
+				threadId: string,
+				executionId: string,
+				write: () => Promise<T>,
+			) =>
+				await service.runInTurn(
+					threadId,
+					executionId,
+					async () => await service.fencedWrite({}, write),
+				);
+			return { service, repository, startTurn, writeInTurn };
+		}
+
+		/** Sets the expiry in the past, so another main can take the lease over. */
+		async function expireLease(repository: AgentSessionLeaseRepository, threadId: string) {
+			await repository.update({ threadId }, { expiresAt: new Date(0) });
+		}
+
+		it('rejects the writes of a turn whose lease another main took over', async () => {
+			const threadId = uuid();
+			const local = sessionsOn(agentRepo.manager.connection, 'main-a');
+			const remote = sessionsOn(peer, 'main-b');
+			const stale = await local.startTurn(threadId);
+			await expireLease(local.repository, threadId);
+			const current = await remote.startTurn(threadId);
+			const write = vi.fn(async () => 'written');
+
+			await expect(local.writeInTurn(threadId, stale.executionId, write)).rejects.toBeInstanceOf(
+				AgentSessionLeaseLostError,
+			);
+			expect(stale.signal.aborted).toBe(true);
+			expect(write).not.toHaveBeenCalled();
+
+			await expect(remote.writeInTurn(threadId, current.executionId, write)).resolves.toBe(
+				'written',
+			);
+			await expect(local.service.fencedWrite({}, write)).resolves.toBe('written');
+		});
+
+		it.skipIf(!isPostgres)(
+			'makes a takeover wait until a fenced write in progress commits',
+			async () => {
+				const threadId = uuid();
+				const local = sessionsOn(agentRepo.manager.connection, 'main-a');
+				const remote = sessionsOn(peer, 'main-b');
+				const stale = await local.startTurn(threadId);
+				await expireLease(local.repository, threadId);
+				const writeStarted = createDeferredPromise();
+				const commitWrite = createDeferredPromise();
+				const writing = local.writeInTurn(threadId, stale.executionId, async () => {
+					writeStarted.resolve();
+					await commitWrite.promise;
+				});
+				await writeStarted.promise;
+
+				let tookOver = false;
+				const takeover = remote.startTurn(threadId).then(() => {
+					tookOver = true;
+				});
+				await new Promise((resolve) => setTimeout(resolve, 200));
+				expect(tookOver).toBe(false);
+
+				commitWrite.resolve();
+				await writing;
+				await takeover;
+
+				await expect(
+					local.writeInTurn(threadId, stale.executionId, async () => 'late'),
+				).rejects.toBeInstanceOf(AgentSessionLeaseLostError);
+			},
+		);
 	});
 });

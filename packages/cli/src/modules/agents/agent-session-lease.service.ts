@@ -1,7 +1,9 @@
 import { Logger } from '@n8n/backend-common';
-import type { OperationContext } from '@n8n/db';
+import { TransactionRunner, type OperationContext } from '@n8n/db';
 import { Service } from '@n8n/di';
 import { InstanceSettings } from 'n8n-core';
+import { UnexpectedError } from 'n8n-workflow';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 import { AgentSessionLeaseLostError } from './agent-session-lease-lost.error';
@@ -40,26 +42,38 @@ export interface SessionLeaseGrant extends SessionLeaseRequest {
 }
 
 interface HeldLease {
+	threadId: string;
 	executionId: string;
 	ownerToken: string;
+	epoch: number;
 	controller: AbortController;
 	failedRenewals: number;
 	renewing: boolean;
+	/** The database confirmed that another turn owns the session. */
+	lost: boolean;
 }
 
 /**
  * Allows one agent turn at a time on a session. The database row decides
  * between mains. The local registry keeps this main from starting a turn on a
  * session while an older local turn on that session is still settling.
+ *
+ * A turn also fences its writes: the async context of the turn carries its
+ * lease, and each fenced write first checks that the lease is still the
+ * turn's. The context stays with async work that outlives the turn, so a late
+ * write of a settled turn is rejected.
  */
 @Service()
 export class AgentSessionLeaseService {
 	private readonly held = new Map<string, HeldLease>();
 
+	private readonly turnScope = new AsyncLocalStorage<HeldLease>();
+
 	constructor(
 		private readonly logger: Logger,
 		private readonly repository: AgentSessionLeaseRepository,
 		private readonly instanceSettings: InstanceSettings,
+		private readonly txRunner: TransactionRunner,
 	) {
 		this.logger = this.logger.scoped('agents');
 	}
@@ -82,13 +96,54 @@ export class AgentSessionLeaseService {
 	hold(grant: SessionLeaseGrant): AbortSignal {
 		const controller = new AbortController();
 		this.held.set(grant.threadId, {
+			threadId: grant.threadId,
 			executionId: grant.executionId,
 			ownerToken: grant.ownerToken,
+			epoch: grant.epoch,
 			controller,
 			failedRenewals: 0,
 			renewing: false,
+			lost: false,
 		});
 		return controller.signal;
+	}
+
+	/** Runs `fn` as part of the turn that holds the lease, so its writes are fenced. */
+	runInTurn<T>(threadId: string, executionId: string, fn: () => T): T {
+		const lease = this.findHeld(threadId, executionId);
+		if (!lease) throw new UnexpectedError('The agent turn holds no session lease');
+		return this.turnScope.run(lease, fn);
+	}
+
+	/** Runs `fn` outside any turn. Use it for independent work that a turn starts. */
+	runOutsideTurn<T>(fn: () => T): T {
+		return this.turnScope.exit(fn);
+	}
+
+	/**
+	 * Runs a write of the current turn after it checks, in the same transaction,
+	 * that the turn still owns its session lease. A write outside a turn runs
+	 * without the check.
+	 */
+	async fencedWrite<T>(
+		ctx: OperationContext,
+		write: (ctx: OperationContext) => Promise<T>,
+	): Promise<T> {
+		const lease = this.turnScope.getStore();
+		if (!lease) return await write(ctx);
+		return await this.writeUnderLease(lease, ctx, write);
+	}
+
+	/** Like `fencedWrite`, for the turn of the given execution. */
+	async fencedWriteFor<T>(
+		threadId: string,
+		executionId: string,
+		ctx: OperationContext,
+		write: (ctx: OperationContext) => Promise<T>,
+	): Promise<T> {
+		const lease = this.findHeld(threadId, executionId);
+		if (!lease) throw new AgentSessionLeaseLostError();
+		return await this.writeUnderLease(lease, ctx, write);
 	}
 
 	/** Extends the lease on each execution heartbeat. Never throws. */
@@ -129,6 +184,26 @@ export class AgentSessionLeaseService {
 		}
 	}
 
+	private async writeUnderLease<T>(
+		lease: HeldLease,
+		ctx: OperationContext,
+		write: (ctx: OperationContext) => Promise<T>,
+	): Promise<T> {
+		// The turn has settled, a newer local turn holds the session, or a takeover is confirmed.
+		if (this.held.get(lease.threadId) !== lease || lease.lost) {
+			throw new AgentSessionLeaseLostError();
+		}
+		return await this.txRunner.run(ctx, async (trxCtx) => {
+			const { threadId, ownerToken, epoch } = lease;
+			if (!(await this.repository.isHeldBy(threadId, ownerToken, epoch, trxCtx))) {
+				// Abort first: the SDK swallows some write errors, and the abort still stops the run.
+				this.loseLease(lease);
+				throw new AgentSessionLeaseLostError();
+			}
+			return await write(trxCtx);
+		});
+	}
+
 	private async extend(threadId: string, lease: HeldLease): Promise<void> {
 		try {
 			const renewed = await this.repository.renew(threadId, lease.ownerToken, SESSION_LEASE_TTL_MS);
@@ -137,7 +212,7 @@ export class AgentSessionLeaseService {
 				return;
 			}
 			// Another main took over the expired lease.
-			this.abortTurn(threadId, lease);
+			this.loseLease(lease);
 		} catch (error) {
 			this.countFailedRenewal(threadId, lease, error);
 		}
@@ -154,12 +229,20 @@ export class AgentSessionLeaseService {
 				error: error instanceof Error ? error.message : String(error),
 			}),
 		});
-		if (lease.failedRenewals >= MAX_FAILED_RENEWALS) this.abortTurn(threadId, lease);
+		// The lease can still be ours, so fenced writes keep checking the database.
+		if (lease.failedRenewals >= MAX_FAILED_RENEWALS) this.abortTurn(lease);
 	}
 
-	private abortTurn(threadId: string, lease: HeldLease): void {
+	/** Another turn owns the session. Fenced writes of this turn fail without a check. */
+	private loseLease(lease: HeldLease): void {
+		lease.lost = true;
+		this.abortTurn(lease);
+	}
+
+	private abortTurn(lease: HeldLease): void {
+		if (lease.controller.signal.aborted) return;
 		this.logger.warn('Lost an agent session lease. Aborting the turn.', {
-			threadId,
+			threadId: lease.threadId,
 			executionId: lease.executionId,
 		});
 		lease.controller.abort(new AgentSessionLeaseLostError());

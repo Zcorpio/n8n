@@ -158,6 +158,7 @@ describe('AgentExecutionRepository', () => {
 				mockLogger(),
 				new AgentSessionLeaseRepository(connection ?? repository.manager.connection, txRunner),
 				mock<InstanceSettings>({ hostId: 'main-test' }),
+				txRunner,
 			),
 			Object.assign(new AgentsConfig(), { messageQueueEnabled }),
 		);

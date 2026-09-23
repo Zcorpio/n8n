@@ -60,6 +60,26 @@ export class AgentSessionLeaseRepository extends BaseRepository<AgentSessionLeas
 		return result.affected === 1;
 	}
 
+	/**
+	 * Checks in the caller's transaction that the turn still owns the lease. On
+	 * PostgreSQL the check holds a share lock on the row until the transaction
+	 * ends, so a takeover waits for the write in progress. SQLite serializes
+	 * writers with `BEGIN IMMEDIATE`.
+	 */
+	async isHeldBy(
+		threadId: string,
+		ownerToken: string,
+		epoch: number,
+		ctx: OperationContext,
+	): Promise<boolean> {
+		const lease = await this.managerFor(ctx).findOne(AgentSessionLease, {
+			select: ['threadId'],
+			where: { threadId, ownerToken, epoch },
+			lock: this.isPostgres ? { mode: 'pessimistic_read' } : undefined,
+		});
+		return lease !== null;
+	}
+
 	/** Frees the lease and keeps the row, so the epoch of the session only increases. */
 	async release(threadId: string, ownerToken: string): Promise<boolean> {
 		const result = await this.update(
