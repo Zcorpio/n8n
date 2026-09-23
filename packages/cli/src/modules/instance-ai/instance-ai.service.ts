@@ -163,7 +163,7 @@ import {
 } from './instance-context.service';
 import { composeLocalMcpServers } from './browser/composite-local-mcp-server';
 import { InstanceAiBrowserSessionService } from './browser/instance-ai-browser-session.service';
-import { CanvasNodeContextFlagGate } from './canvas-node-context-flag-gate';
+import { NodeContextFlagGate } from './node-context-flag-gate';
 import { enabledToolCategories, resolveComputerUseState } from './computer-use-availability';
 import { dropRejectedAttachmentsFromHistory } from './drop-rejected-attachments';
 import { EvalThreadCredentialAllowlistService } from './eval/thread-credential-allowlist.service';
@@ -769,7 +769,7 @@ export class InstanceAiService {
 		private readonly creditService: InstanceAiCreditService,
 		private readonly publisher: Publisher,
 		private readonly instanceAiErrorReporter: InstanceAiErrorReporterService,
-		private readonly canvasNodeContextFlagGate: CanvasNodeContextFlagGate,
+		private readonly nodeContextFlagGate: NodeContextFlagGate,
 		private readonly push: Push,
 		private readonly conversationHistoryService: InstanceAiConversationHistoryService,
 		private readonly instanceContext: InstanceContextService,
@@ -3608,9 +3608,8 @@ export class InstanceAiService {
 
 	/**
 	 * Splits a message's attachments into the resource references that feed the
-	 * context block, gating canvas node-selection attachments behind
-	 * CANVAS_NODE_CONTEXT_FLAG per user. Workflow and agent references always pass
-	 * through — only `nodes` attachments are conditional.
+	 * context block. The canvas node-context and Assistant mentions flags both
+	 * accept `nodes` attachments. Workflow and agent references always pass.
 	 */
 	private async resolveContextAttachments(
 		attachments: InstanceAiAttachment[] | undefined,
@@ -3631,7 +3630,7 @@ export class InstanceAiService {
 		);
 
 		const canvasNodeContextEnabled =
-			nodeAttachments.length > 0 && (await this.canvasNodeContextFlagGate.isEnabled(user));
+			nodeAttachments.length > 0 && (await this.nodeContextFlagGate.isEnabled(user));
 
 		return [
 			...workflowAttachments,

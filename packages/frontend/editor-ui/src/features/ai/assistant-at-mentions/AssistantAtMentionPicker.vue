@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import {
 	N8nDropdownMenu,
+	N8nButton,
 	N8nIconButton,
+	N8nText,
 	N8nTooltip,
 	type DropdownMenuExposed,
 	type DropdownMenuItemProps,
@@ -29,6 +31,11 @@ import { buildMentionAttachment } from './utils/buildMentionAttachment';
 interface MentionMenuData {
 	item: AssistantMentionItem;
 }
+
+const RETRY_ITEM_PREFIX = 'retry:';
+const RETRY_SOURCES_ITEM_ID = 'retry-sources';
+const ERROR_ITEM_PREFIX = 'error:';
+const LOADING_ITEM_PREFIX = 'loading:';
 
 type MentionMenuItem = DropdownMenuItemProps<string, MentionMenuData>;
 
@@ -78,15 +85,36 @@ let highlightedForCurrentOpen = false;
 
 function toMenuItem(item: AssistantMentionItem, searchMode: boolean): MentionMenuItem {
 	const indexEntry = artifactIndex.getEntry(item.workflowId);
+	let children = item.children?.map((child) => toMenuItem(child, false));
+	if (item.hasChildren && !children) {
+		children =
+			indexEntry?.status === 'error'
+				? [
+						{
+							id: `${ERROR_ITEM_PREFIX}${item.workflowId}`,
+							label: i18n.baseText('instanceAi.mentions.loadError'),
+							disabled: true,
+						},
+						{
+							id: `${RETRY_ITEM_PREFIX}${item.workflowId}`,
+							label: i18n.baseText('generic.retry'),
+							keepOpen: true,
+						},
+					]
+				: [
+						{
+							id: `${LOADING_ITEM_PREFIX}${item.workflowId}`,
+							label: i18n.baseText('instanceAi.mentions.loadingWorkflowContents'),
+							disabled: true,
+						},
+					];
+	}
 	return {
 		id: item.key,
 		label: searchMode ? item.breadcrumbs.join(' > ') : item.label,
 		data: { item },
 		selectable: item.hasChildren || undefined,
-		children: item.children?.map((child) => toMenuItem(child, false)),
-		loading:
-			item.hasChildren === true && item.children === undefined && indexEntry?.status !== 'error',
-		loadingItemCount: 3,
+		children,
 	};
 }
 
@@ -95,7 +123,45 @@ const menuItems = computed<MentionMenuItem[]>(() => {
 		return sources.searchResults.value.map((item) => toMenuItem(item, true));
 	}
 
-	return sources.browseSections.value.flatMap((section) => {
+	const sections = sources.browseSections.value;
+	const hasItems = sections.some((section) => section.items.length > 0);
+	if (!hasItems && sources.providerErrors.value.size > 0) return [];
+
+	return sections.flatMap((section) => {
+		if (section.id === 'workflows' && section.items.length === 0) {
+			if (sources.isBrowsing.value) return [];
+			if (sources.providerErrors.value.has('workflows')) {
+				return [
+					{
+						id: 'section:workflows',
+						label: i18n.baseText('instanceAi.mentions.workflowsSection'),
+						header: true,
+					},
+					{
+						id: 'state:workflows-error',
+						label: i18n.baseText('instanceAi.mentions.loadError'),
+						disabled: true,
+					},
+					{
+						id: RETRY_SOURCES_ITEM_ID,
+						label: i18n.baseText('generic.retry'),
+						keepOpen: true,
+					},
+				];
+			}
+			return [
+				{
+					id: 'section:workflows',
+					label: i18n.baseText('instanceAi.mentions.workflowsSection'),
+					header: true,
+				},
+				{
+					id: 'state:no-recent-workflows',
+					label: i18n.baseText('instanceAi.mentions.noRecentWorkflows'),
+					disabled: true,
+				},
+			];
+		}
 		if (section.items.length === 0) return [];
 		return [
 			{
@@ -111,6 +177,33 @@ const menuItems = computed<MentionMenuItem[]>(() => {
 		];
 	});
 });
+
+const isLoading = computed(
+	() =>
+		(props.query.trim()
+			? sources.searchResults.value.length === 0
+			: !sources.browseSections.value.some((section) => section.items.length > 0)) &&
+		(searchPending.value || sources.isBrowsing.value || sources.isSearching.value),
+);
+
+function getResultPosition(itemId: string): number | undefined {
+	function find(items: MentionMenuItem[]): number | undefined {
+		let position = 0;
+		for (const item of items) {
+			if (item.header) {
+				position = 0;
+				continue;
+			}
+			if (item.data) position++;
+			if (item.id === itemId && item.data) return position;
+			const childPosition = item.children ? find(item.children) : undefined;
+			if (childPosition !== undefined) return childPosition;
+		}
+		return undefined;
+	}
+
+	return find(menuItems.value);
+}
 
 const itemsById = computed(() => {
 	const items = new Map<string, AssistantMentionItem>();
@@ -171,10 +264,40 @@ watch(menuItems, (items) => {
 });
 
 function handleSelect(itemId: string): void {
+	if (itemId === RETRY_SOURCES_ITEM_ID) {
+		retrySources();
+		return;
+	}
+	if (itemId.startsWith(RETRY_ITEM_PREFIX)) {
+		void artifactIndex.retry(itemId.slice(RETRY_ITEM_PREFIX.length));
+		return;
+	}
 	const item = itemsById.value.get(itemId);
 	if (!item) return;
 	const selection = buildMentionAttachment(item, artifactIndex.getIndex(item.workflowId));
-	if (selection) emit('select', selection);
+	if (selection) {
+		const resultPosition = getResultPosition(itemId);
+		emit('select', {
+			...selection,
+			...(resultPosition !== undefined
+				? {
+						telemetry: {
+							mode: props.query.trim() ? ('search' as const) : ('browse' as const),
+							resultPosition,
+							queryLength: props.query.trim().length,
+						},
+					}
+				: {}),
+		});
+	}
+}
+
+function retrySources(): void {
+	if (props.query.trim()) {
+		void sources.search(props.query);
+	} else {
+		void sources.browse();
+	}
 }
 
 function handleSubmenuToggle(itemId: string, open: boolean): void {
@@ -203,18 +326,37 @@ defineExpose({ handleExternalKeydown });
 		:external-focus-target="inputElement"
 		:reference="reference ?? undefined"
 		:disabled="disabled"
-		:loading="searchPending"
+		:loading="isLoading"
 		:empty-text="i18n.baseText('instanceAi.mentions.noResults')"
+		:search-placeholder="i18n.baseText('instanceAi.mentions.searchPlaceholder')"
 		placement="top-start"
 		searchable
 		search-mode="external"
 		data-test-id="instance-ai-mention-menu"
+		content-test-id="instance-ai-mention-menu-content"
 		@update:model-value="emit('update:modelValue', $event)"
 		@select="handleSelect"
 		@submenu:toggle="handleSubmenuToggle"
 	>
+		<template #loading>
+			<N8nText :class="$style.loadingState" size="small">
+				{{ i18n.baseText('instanceAi.mentions.loadingWorkflows') }}
+			</N8nText>
+		</template>
+		<template v-if="sources.providerErrors.value.size > 0" #empty>
+			<div :class="$style.errorState">
+				<N8nText size="small">{{ i18n.baseText('instanceAi.mentions.loadError') }}</N8nText>
+				<N8nButton size="small" variant="outline" @click="retrySources">
+					{{ i18n.baseText('generic.retry') }}
+				</N8nButton>
+			</div>
+		</template>
 		<template #trigger>
-			<N8nTooltip :content="i18n.baseText('instanceAi.mentions.buttonLabel')" placement="top">
+			<N8nTooltip
+				as-child
+				:content="i18n.baseText('instanceAi.mentions.buttonLabel')"
+				placement="top"
+			>
 				<N8nIconButton
 					icon="at-sign"
 					variant="ghost"
@@ -227,3 +369,17 @@ defineExpose({ handleExternalKeydown });
 		</template>
 	</N8nDropdownMenu>
 </template>
+
+<style module lang="scss">
+.errorState {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing--xs);
+	padding: var(--spacing--xs);
+}
+
+.loadingState {
+	display: block;
+	padding: var(--spacing--xs);
+}
+</style>

@@ -52,6 +52,10 @@ import {
 	fetchThreadStatus as fetchThreadStatusApi,
 } from './instanceAi.memory.api';
 import type { InstanceAiMessageAuthorship } from './prefills';
+import {
+	EMPTY_ASSISTANT_MENTION_COUNTS,
+	type AssistantMentionCounts,
+} from '@/features/ai/assistant-at-mentions/assistantAtMentions.types';
 import { handleEvent as reduceEvent, createRunStateFromTree } from './instanceAi.reducer';
 import { getLatestBuildResult, type RememberedManualExecution } from './canvasPreview.utils';
 import {
@@ -1459,6 +1463,8 @@ export function createThreadRuntime(
 		isFirstMessage: boolean,
 		authorship: InstanceAiMessageAuthorship,
 		actionSource: InstanceAiThreadSourcePersisted,
+		mentionCounts: AssistantMentionCounts,
+		attachmentCount: number,
 	): void {
 		const isPrefill = authorship.kind === 'prefill';
 		telemetry.track(TELEMETRY_EVENT.INSTANCE_AI.USER_SENT_BUILDER_MESSAGE, {
@@ -1471,6 +1477,11 @@ export function createThreadRuntime(
 			prefill_type: isPrefill ? authorship.prefillType : null,
 			prefill_id: isPrefill ? (authorship.prefillId ?? null) : null,
 			prompt_modified: isPrefill ? (authorship.promptModified ?? false) : null,
+			mention_count: mentionCounts.mentionCount,
+			workflow_mention_count: mentionCounts.workflowMentionCount,
+			node_mention_count: mentionCounts.nodeMentionCount,
+			group_mention_count: mentionCounts.groupMentionCount,
+			attachment_count: attachmentCount,
 		});
 	}
 
@@ -1539,6 +1550,7 @@ export function createThreadRuntime(
 			pushRef?: string;
 			handoffContext?: InstanceAiHandoffContext;
 			responseStartedAtEpochMs?: number;
+			mentionCounts?: AssistantMentionCounts;
 		},
 	): Promise<boolean> {
 		const {
@@ -1547,6 +1559,7 @@ export function createThreadRuntime(
 			pushRef,
 			handoffContext,
 			responseStartedAtEpochMs = instanceAiResponseNow(),
+			mentionCounts = EMPTY_ASSISTANT_MENTION_COUNTS,
 		} = opts;
 		const metricGeneration = responseMetricGeneration;
 		amendContext.value = null;
@@ -1556,7 +1569,13 @@ export function createThreadRuntime(
 			const isFirstMessage = !messages.value.some((m) => m.role === 'user');
 			const actionSource = resolveActionSource();
 			const optimistic = pushOptimisticUserMessage(message, attachments, handoffContext);
-			trackUserMessageSent(isFirstMessage, authorship, actionSource);
+			trackUserMessageSent(
+				isFirstMessage,
+				authorship,
+				actionSource,
+				mentionCounts,
+				attachments?.length ?? 0,
+			);
 
 			const runId = await dispatchUserMessage(message, attachments, handoffContext, pushRef);
 			if (!runId) {

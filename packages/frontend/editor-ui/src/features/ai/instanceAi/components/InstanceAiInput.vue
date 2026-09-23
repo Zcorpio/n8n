@@ -18,11 +18,15 @@ import { useToast } from '@n8n/composables/useToast';
 import AssistantAtMentionPicker from '@/features/ai/assistant-at-mentions/AssistantAtMentionPicker.vue';
 import { useAssistantAtMentions } from '@/features/ai/assistant-at-mentions/composables/useAssistantAtMentions';
 import { useAssistantMentionAttachments } from '@/features/ai/assistant-at-mentions/composables/useAssistantMentionAttachments';
+import { useAssistantMentionAvailability } from '@/features/ai/assistant-at-mentions/composables/useAssistantMentionAvailability';
+import { useAssistantAtMentionsTelemetry } from '@/features/ai/assistant-at-mentions/assistantAtMentions.telemetry';
 import type {
 	AssistantMentionArtifactReference,
+	AssistantMentionCounts,
 	AssistantMentionSelection,
 	WorkflowArtifactReference,
 } from '@/features/ai/assistant-at-mentions/assistantAtMentions.types';
+import { EMPTY_ASSISTANT_MENTION_COUNTS } from '@/features/ai/assistant-at-mentions/assistantAtMentions.types';
 import { INSTANCE_AI_EMPTY_STATE_SUGGESTIONS_VERSION } from '../emptyStateSuggestions';
 import { useInstanceAiPromptSuggestionsTelemetry } from '../instanceAiPromptSuggestions.telemetry';
 import { instanceAiResponseNow } from '../instanceAi.responseTiming';
@@ -139,6 +143,7 @@ const emit = defineEmits<{
 		authorship: InstanceAiMessageAuthorship,
 		responseStartedAtEpochMs: number,
 		acceptDraft: () => void,
+		mentionCounts: AssistantMentionCounts,
 	];
 	stop: [];
 	'dismiss-context-chip': [];
@@ -156,6 +161,7 @@ const emit = defineEmits<{
 const i18n = useI18n();
 const toast = useToast();
 const promptSuggestionsTelemetry = useInstanceAiPromptSuggestionsTelemetry();
+const mentionTelemetry = useAssistantAtMentionsTelemetry();
 const instanceAiStore = useInstanceAiStore();
 const inputText = ref('');
 const attachedFiles = ref<File[]>([]);
@@ -290,17 +296,30 @@ const isGatedBySetup = computed(
 const shouldShowMentions = computed(
 	() => props.mentionsEnabled && Boolean(props.mentionProjectId) && !props.isAwaitingPlanReview,
 );
+const mentionAvailability = useAssistantMentionAvailability({
+	enabled: shouldShowMentions,
+	projectId: () => props.mentionProjectId,
+	artifacts: () => props.mentionArtifacts,
+});
 const canUseMentions = computed(
-	() => shouldShowMentions.value && !isBusy.value && !isGatedBySetup.value,
+	() =>
+		shouldShowMentions.value &&
+		mentionAvailability.isAvailable.value &&
+		!isBusy.value &&
+		!isGatedBySetup.value,
 );
 const inputElement = computed(() => chatInputRef.value?.getInputElement() ?? null);
 const mentions = useAssistantAtMentions({
 	text: inputText,
 	enabled: canUseMentions,
 	getInputElement: () => inputElement.value ?? undefined,
+	onOpened: mentionTelemetry.trackPickerOpened,
 });
 const mentionMenuOpen = mentions.menuOpen;
 const mentionQuery = mentions.query;
+watch(canUseMentions, (enabled, wasEnabled) => {
+	if (enabled && !wasEnabled) void mentions.handleTextChange(inputText.value);
+});
 
 const mentionAttachments = useAssistantMentionAttachments({
 	files: attachedFiles,
@@ -309,10 +328,14 @@ const mentionAttachments = useAssistantMentionAttachments({
 	reservedAttachmentCount: () => props.reservedAttachmentCount,
 	onReferenceAdded: (reference) => emit('mention-reference-added', reference),
 	onReferenceRemoved: (referenceId) => emit('mention-reference-removed', referenceId),
+	onMentionRemoved: mentionTelemetry.trackMentionRemoved,
 	onCleared: mentions.close,
 });
 
 async function handleMentionSelection(selection: AssistantMentionSelection): Promise<void> {
+	const alreadyArtifact = props.mentionArtifacts.some(
+		(artifact) => artifact.id === selection.item.workflowId,
+	);
 	const result = mentionAttachments.select(selection);
 	if (result.status === 'limit') {
 		toast.showError(
@@ -321,6 +344,7 @@ async function handleMentionSelection(selection: AssistantMentionSelection): Pro
 		);
 		return;
 	}
+	mentionTelemetry.trackMentionSelected(selection, alreadyArtifact);
 
 	if (result.truncated) {
 		toast.showError(
@@ -418,6 +442,7 @@ function emitSubmittedMessage(
 	authorship: InstanceAiMessageAuthorship,
 	responseStartedAtEpochMs: number,
 	acceptDraft: () => void,
+	mentionCounts: AssistantMentionCounts,
 ) {
 	previewPrompt.value = null;
 	emit(
@@ -428,6 +453,7 @@ function emitSubmittedMessage(
 		authorship,
 		responseStartedAtEpochMs,
 		acceptDraft,
+		mentionCounts,
 	);
 }
 
@@ -520,6 +546,7 @@ function submitComposerMessage(
 		files: File[];
 		resources: InstanceAiResourceAttachment[];
 		mentionReferenceIds: readonly string[];
+		mentionCounts: AssistantMentionCounts;
 	},
 ) {
 	if (!canSubmitMessage(message, attachments?.length ?? 0)) {
@@ -541,6 +568,7 @@ function submitComposerMessage(
 			USER_TYPED_MESSAGE,
 			responseStartedAtEpochMs,
 			() => {},
+			EMPTY_ASSISTANT_MENTION_COUNTS,
 		);
 		resetDraftComposer({ keepAttachments: true });
 		return;
@@ -550,6 +578,7 @@ function submitComposerMessage(
 
 	const submittedFiles = draftSnapshot?.files ?? [...attachedFiles.value];
 	const submittedResources = draftSnapshot?.resources ?? [...attachedResources.value];
+	const mentionCounts = draftSnapshot?.mentionCounts ?? mentionAttachments.snapshotCounts();
 	const mentionSubmission = mentionAttachments.detachSubmission(draftSnapshot?.mentionReferenceIds);
 	emitSubmittedMessage(
 		message,
@@ -562,6 +591,7 @@ function submitComposerMessage(
 		resolveAuthorship(message, prefill),
 		responseStartedAtEpochMs,
 		mentionSubmission.accept,
+		mentionCounts,
 	);
 	resetDraftComposer();
 }
@@ -602,6 +632,7 @@ async function handleSubmit() {
 	const submittedFiles = [...attachedFiles.value];
 	const submittedResources = [...attachedResources.value];
 	const mentionReferenceIds = mentionAttachments.snapshotSubmission();
+	const mentionCounts = mentionAttachments.snapshotCounts();
 	isPreparingSubmission.value = true;
 	let fileAttachments: InstanceAiAttachment[];
 	try {
@@ -623,7 +654,7 @@ async function handleSubmit() {
 		attachments.length ? attachments : undefined,
 		prefill,
 		responseStartedAtEpochMs,
-		{ files: submittedFiles, resources: submittedResources, mentionReferenceIds },
+		{ files: submittedFiles, resources: submittedResources, mentionReferenceIds, mentionCounts },
 	);
 }
 
@@ -892,7 +923,7 @@ const resizable = computed(() => {
 					:active-workflow-id="props.mentionActiveWorkflowId"
 					:input-element="inputElement"
 					:reference="composerRef"
-					:disabled="isBusy || isGatedBySetup"
+					:disabled="!canUseMentions"
 					@update:model-value="mentions.handleMenuOpenChange"
 					@select="handleMentionSelection"
 				/>

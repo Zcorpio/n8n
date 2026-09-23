@@ -132,7 +132,7 @@ describe('N8nDropdownMenuItem', () => {
 				highlighted: true,
 			});
 
-			expect(await wrapper.findByRole('menuitem')).toHaveAttribute('aria-selected', 'true');
+			expect(await wrapper.findByRole('menuitem')).toHaveAttribute('data-virtual-highlighted');
 		});
 
 		it('should show title attribute when label is 20+ characters', async () => {

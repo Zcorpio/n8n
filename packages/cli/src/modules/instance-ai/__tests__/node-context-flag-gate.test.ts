@@ -1,24 +1,30 @@
-import { CANVAS_NODE_CONTEXT_FLAG } from '@n8n/api-types';
+import { AI_ASSISTANT_AT_MENTIONS_FLAG, CANVAS_NODE_CONTEXT_FLAG } from '@n8n/api-types';
 import type { User } from '@n8n/db';
 import type { Mocked } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
 import type { PostHogClient } from '@/posthog';
 
-import { CanvasNodeContextFlagGate } from '../canvas-node-context-flag-gate';
+import { NodeContextFlagGate } from '../node-context-flag-gate';
 
-describe('CanvasNodeContextFlagGate', () => {
+describe('NodeContextFlagGate', () => {
 	let postHogClient: Mocked<PostHogClient>;
-	let gate: CanvasNodeContextFlagGate;
+	let gate: NodeContextFlagGate;
 	const user = mock<User>({ id: 'user-1' });
 
 	beforeEach(() => {
 		postHogClient = mock<PostHogClient>();
-		gate = new CanvasNodeContextFlagGate(postHogClient);
+		gate = new NodeContextFlagGate(postHogClient);
 	});
 
-	it('resolves true when the flag is on for the user', async () => {
+	it('resolves true when the canvas node-context flag is on', async () => {
 		postHogClient.getFeatureFlags.mockResolvedValue({ [CANVAS_NODE_CONTEXT_FLAG]: true });
+
+		expect(await gate.isEnabled(user)).toBe(true);
+	});
+
+	it('resolves true when the Assistant mentions flag is on', async () => {
+		postHogClient.getFeatureFlags.mockResolvedValue({ [AI_ASSISTANT_AT_MENTIONS_FLAG]: true });
 
 		expect(await gate.isEnabled(user)).toBe(true);
 	});
@@ -29,8 +35,11 @@ describe('CanvasNodeContextFlagGate', () => {
 		expect(await gate.isEnabled(user)).toBe(false);
 	});
 
-	it('resolves false when the flag is explicitly off', async () => {
-		postHogClient.getFeatureFlags.mockResolvedValue({ [CANVAS_NODE_CONTEXT_FLAG]: false });
+	it('resolves false when both flags are explicitly off', async () => {
+		postHogClient.getFeatureFlags.mockResolvedValue({
+			[CANVAS_NODE_CONTEXT_FLAG]: false,
+			[AI_ASSISTANT_AT_MENTIONS_FLAG]: false,
+		});
 
 		expect(await gate.isEnabled(user)).toBe(false);
 	});

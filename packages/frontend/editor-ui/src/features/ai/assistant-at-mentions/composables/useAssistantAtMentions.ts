@@ -1,5 +1,7 @@
 import { nextTick, ref, toValue, watch, type MaybeRefOrGetter, type Ref } from 'vue';
 
+import type { AssistantMentionTriggerSource } from '../assistantAtMentions.types';
+
 interface MentionRange {
 	origin: 'typed' | 'button';
 	start: number;
@@ -11,6 +13,7 @@ export function useAssistantAtMentions(options: {
 	text: Ref<string>;
 	enabled: MaybeRefOrGetter<boolean>;
 	getInputElement: () => HTMLTextAreaElement | undefined;
+	onOpened?: (source: AssistantMentionTriggerSource) => void;
 }) {
 	const menuOpen = ref(false);
 	const query = ref('');
@@ -32,19 +35,22 @@ export function useAssistantAtMentions(options: {
 		};
 	}
 
-	function openTypedRange(triggerIndex: number, caret: number): void {
+	function openTypedRange(triggerIndex: number, caret: number, initialQuery = ''): void {
+		const wasOpen = menuOpen.value;
 		activeRange.value = {
 			origin: 'typed',
 			start: triggerIndex,
 			queryStart: triggerIndex + 1,
 			end: caret,
 		};
-		query.value = '';
+		query.value = initialQuery;
 		menuOpen.value = true;
+		if (!wasOpen) options.onOpened?.('typed');
 	}
 
 	function openFromButton(): void {
 		if (!toValue(options.enabled)) return;
+		const wasOpen = menuOpen.value;
 		saveSelection();
 		activeRange.value = {
 			origin: 'button',
@@ -54,6 +60,7 @@ export function useAssistantAtMentions(options: {
 		};
 		query.value = '';
 		menuOpen.value = true;
+		if (!wasOpen) options.onOpened?.('button');
 	}
 
 	async function handleTextChange(value: string, caretOverride?: number): Promise<void> {
@@ -67,14 +74,18 @@ export function useAssistantAtMentions(options: {
 		const input = options.getInputElement();
 		const caret = caretOverride ?? input?.selectionEnd ?? value.length;
 		savedSelection.value = { start: caret, end: caret };
-		const triggerIndex = caret - 1;
-		const followsWhitespace = triggerIndex === 0 || /\s/.test(value[triggerIndex - 1] ?? '');
-		if (value[triggerIndex] === '@' && followsWhitespace) {
-			openTypedRange(triggerIndex, caret);
+		const valueBeforeCaret = value.slice(0, caret);
+		const possibleTriggerIndex = valueBeforeCaret.lastIndexOf('@');
+		const triggerIndex =
+			possibleTriggerIndex === 0 || /\s/.test(valueBeforeCaret[possibleTriggerIndex - 1] ?? '')
+				? possibleTriggerIndex
+				: -1;
+		const range = activeRange.value;
+		if (triggerIndex >= 0 && (!range || range.origin !== 'typed' || range.start !== triggerIndex)) {
+			openTypedRange(triggerIndex, caret, value.slice(triggerIndex + 1, caret));
 			return;
 		}
 
-		const range = activeRange.value;
 		if (range) {
 			const triggerExists = range.origin === 'button' || value[range.start] === '@';
 			const beforeRange = range.origin === 'typed' ? caret <= range.start : caret < range.start;

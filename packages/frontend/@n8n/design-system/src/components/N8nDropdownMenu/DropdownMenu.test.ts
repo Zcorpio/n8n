@@ -894,9 +894,10 @@ describe('N8nDropdownMenu', () => {
 	describe('external search mode', () => {
 		it('should keep focus in the external textarea without rendering an internal search input', async () => {
 			const wrapper = renderExternalDropdown();
-			const textarea = wrapper.getByRole('textbox');
+			const textarea = wrapper.container.querySelector('textarea')!;
 
 			await getDropdownContent();
+			await waitFor(() => expect(textarea).toHaveAttribute('role', 'combobox'));
 			await waitFor(() => expect(document.activeElement).toBe(textarea));
 			expect(document.querySelector('input[type="text"]')).not.toBeInTheDocument();
 
@@ -910,13 +911,13 @@ describe('N8nDropdownMenu', () => {
 
 		it('should navigate and select from the external textarea', async () => {
 			const wrapper = renderExternalDropdown();
-			const textarea = wrapper.getByRole('textbox');
+			const textarea = wrapper.container.querySelector('textarea')!;
 			await waitFor(() => expect(document.activeElement).toBe(textarea));
 
 			await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowUp}');
 
 			const firstItem = document.querySelectorAll('[role="menuitem"]')[0];
-			expect(firstItem).toHaveAttribute('aria-selected', 'true');
+			expect(firstItem).toHaveAttribute('data-virtual-highlighted');
 			expect(textarea).toHaveAttribute('aria-activedescendant', firstItem.id);
 			expect(document.activeElement).toBe(textarea);
 
@@ -991,7 +992,7 @@ describe('N8nDropdownMenu', () => {
 					children: [{ id: 'child', label: 'Child' }],
 				},
 			]);
-			const textarea = wrapper.getByRole('textbox');
+			const textarea = wrapper.container.querySelector('textarea')!;
 			await waitFor(() => expect(document.activeElement).toBe(textarea));
 
 			await userEvent.keyboard('{ArrowDown}{ArrowRight}');
@@ -999,14 +1000,13 @@ describe('N8nDropdownMenu', () => {
 
 			await userEvent.keyboard('{ArrowDown}');
 			const child = wrapper.getByText('Child').closest('[role="menuitem"]');
-			expect(child).toHaveAttribute('aria-selected', 'true');
+			expect(child).toHaveAttribute('data-virtual-highlighted');
 			expect(document.activeElement).toBe(textarea);
 
 			await userEvent.keyboard('{ArrowLeft}');
 			await waitFor(() => expect(document.querySelectorAll('[role="menu"]')).toHaveLength(1));
 			expect(wrapper.getByText('Parent').closest('[role="menuitem"]')).toHaveAttribute(
-				'aria-selected',
-				'true',
+				'data-virtual-highlighted',
 			);
 
 			await userEvent.keyboard('{Enter}');
@@ -1015,7 +1015,7 @@ describe('N8nDropdownMenu', () => {
 
 		it('should close on Escape and restore textarea focus', async () => {
 			const wrapper = renderExternalDropdown();
-			const textarea = wrapper.getByRole('textbox');
+			const textarea = wrapper.container.querySelector('textarea')!;
 			await waitFor(() => expect(document.activeElement).toBe(textarea));
 
 			await userEvent.keyboard('{Escape}');
@@ -1028,7 +1028,7 @@ describe('N8nDropdownMenu', () => {
 
 		it('should close on Tab without keeping focus in the textarea', async () => {
 			const wrapper = renderExternalDropdown();
-			const textarea = wrapper.getByRole('textbox');
+			const textarea = wrapper.container.querySelector('textarea')!;
 			await waitFor(() => expect(document.activeElement).toBe(textarea));
 
 			await userEvent.tab();
@@ -1039,7 +1039,7 @@ describe('N8nDropdownMenu', () => {
 
 		it('should not restore textarea focus from a pending frame after Tab', async () => {
 			const wrapper = renderExternalDropdown();
-			const textarea = wrapper.getByRole('textbox');
+			const textarea = wrapper.container.querySelector('textarea')!;
 			await waitFor(() => expect(document.activeElement).toBe(textarea));
 
 			const pendingFrames: FrameRequestCallback[] = [];
@@ -1071,7 +1071,7 @@ describe('N8nDropdownMenu', () => {
 
 		it('should ignore keys during IME composition', async () => {
 			const wrapper = renderExternalDropdown();
-			const textarea = wrapper.getByRole('textbox');
+			const textarea = wrapper.container.querySelector('textarea')!;
 			await waitFor(() => expect(document.activeElement).toBe(textarea));
 
 			textarea.dispatchEvent(

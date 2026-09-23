@@ -76,6 +76,8 @@ export interface DropdownMenuExposed {
 	highlightFirstItem: () => void;
 	/** Handles menu navigation from an external text control. */
 	handleExternalKeydown: (event: KeyboardEvent) => boolean;
+	/** Moves focus to the rendered trigger element. */
+	focusTrigger: () => void;
 }
 
 export type DropdownMenuItemProps<T = string, D = never> = {

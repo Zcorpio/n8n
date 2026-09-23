@@ -9,9 +9,12 @@ import InstanceAiInput from '../InstanceAiInput.vue';
 import AttachmentPreview from '../AttachmentPreview.vue';
 import { useInstanceAiStore } from '../../instanceAi.store';
 import type { AssistantMentionSelection } from '@/features/ai/assistant-at-mentions/assistantAtMentions.types';
+import { TELEMETRY_EVENT } from '@n8n/telemetry';
+
+const telemetryTrack = vi.hoisted(() => vi.fn());
 
 vi.mock('@n8n/composables/useTelemetry', () => ({
-	useTelemetry: vi.fn(() => ({ track: vi.fn() })),
+	useTelemetry: vi.fn(() => ({ track: telemetryTrack })),
 }));
 
 vi.mock('@/app/stores/pushConnection.store', () => ({
@@ -37,6 +40,13 @@ const renderComponent = createComponentRenderer(InstanceAiInput, {
 describe('InstanceAiInput — staged node attachments', () => {
 	beforeEach(() => {
 		setActivePinia(createTestingPinia({ stubActions: false }));
+		telemetryTrack.mockClear();
+	});
+
+	it('keeps the existing input menu enabled outside the mentions rollout', () => {
+		const { getByTestId } = renderComponent();
+
+		expect(getByTestId('instance-ai-input-menu')).toBeEnabled();
 	});
 
 	it('consumes staged attachments into the draft without touching already-typed text', async () => {
@@ -182,6 +192,7 @@ const workflowMentionSelection: AssistantMentionSelection = {
 	},
 	attachment: { type: 'workflow', id: 'w1', name: 'Orders' },
 	truncated: false,
+	telemetry: { mode: 'browse', resultPosition: 1, queryLength: 0 },
 };
 
 const nodeMentionSelection: AssistantMentionSelection = {
@@ -202,6 +213,7 @@ const nodeMentionSelection: AssistantMentionSelection = {
 		sets: [{ nodes: [{ id: 'n1', name: 'Validate' }] }],
 	},
 	truncated: false,
+	telemetry: { mode: 'search', resultPosition: 2, queryLength: 3 },
 };
 
 const MentionPickerStub = defineComponent({
@@ -235,6 +247,7 @@ const renderMentionsInput = createComponentRenderer(InstanceAiInput, {
 		...defaultProps(),
 		mentionsEnabled: true,
 		mentionProjectId: 'project-1',
+		mentionArtifacts: [{ id: 'w1', name: 'Orders' }],
 	},
 	global: { stubs: { AssistantAtMentionPicker: MentionPickerStub } },
 });
@@ -242,6 +255,18 @@ const renderMentionsInput = createComponentRenderer(InstanceAiInput, {
 describe('InstanceAiInput — mention attachments', () => {
 	beforeEach(() => {
 		setActivePinia(createTestingPinia({ stubActions: false }));
+		telemetryTrack.mockClear();
+	});
+
+	it('tracks a typed picker open without sending draft text', async () => {
+		const { getByRole } = renderMentionsInput();
+
+		await userEvent.type(getByRole('textbox'), '@');
+
+		expect(telemetryTrack).toHaveBeenCalledWith(
+			TELEMETRY_EVENT.INSTANCE_AI.USER_OPENED_AI_ASSISTANT_MENTION_PICKER,
+			{ source: 'typed' },
+		);
 	});
 
 	it('inserts quoted text, attaches the workflow, and registers a transient reference', async () => {
@@ -254,6 +279,17 @@ describe('InstanceAiInput — mention attachments', () => {
 		expect(getByTestId('attachment-preview-resource')).toHaveTextContent('Orders');
 		expect(emitted()['mention-reference-added']).toHaveLength(1);
 		expect(emitted()['mention-workflow-open']?.[0]).toEqual(['w1']);
+		expect(telemetryTrack).toHaveBeenCalledWith(
+			TELEMETRY_EVENT.INSTANCE_AI.USER_SELECTED_AI_ASSISTANT_MENTION,
+			{
+				kind: 'workflow',
+				mode: 'browse',
+				source: 'workflows',
+				result_position: 1,
+				query_length: 0,
+				already_artifact: true,
+			},
+		);
 	});
 
 	it('keeps mention context on failed send and releases it after an accepted send', async () => {
@@ -268,8 +304,15 @@ describe('InstanceAiInput — mention attachments', () => {
 			unknown,
 			number,
 			() => void,
+			unknown,
 		];
 		expect(firstSubmit[1]).toEqual([{ type: 'workflow', id: 'w1', name: 'Orders' }]);
+		expect(firstSubmit[6]).toEqual({
+			mentionCount: 1,
+			workflowMentionCount: 1,
+			nodeMentionCount: 0,
+			groupMentionCount: 0,
+		});
 		expect(firstSubmit[2]()).toBe(true);
 		await findByTestId('attachment-preview-resource');
 		expect(emitted()['mention-reference-removed']).toBeUndefined();
@@ -285,6 +328,10 @@ describe('InstanceAiInput — mention attachments', () => {
 		];
 		secondSubmit[5]();
 		expect(emitted()['mention-reference-removed']).toHaveLength(1);
+		expect(telemetryTrack).not.toHaveBeenCalledWith(
+			TELEMETRY_EVENT.INSTANCE_AI.USER_REMOVED_AI_ASSISTANT_MENTION,
+			{ kind: 'workflow' },
+		);
 	});
 
 	it('adds node context with parent workflow metadata', async () => {
@@ -310,5 +357,9 @@ describe('InstanceAiInput — mention attachments', () => {
 		await userEvent.click(getByTestId('attachment-preview-remove-resource'));
 
 		expect(emitted()['mention-reference-removed']).toHaveLength(1);
+		expect(telemetryTrack).toHaveBeenCalledWith(
+			TELEMETRY_EVENT.INSTANCE_AI.USER_REMOVED_AI_ASSISTANT_MENTION,
+			{ kind: 'workflow' },
+		);
 	});
 });
