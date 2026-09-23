@@ -50,6 +50,7 @@ import { OnPubSubEvent } from '@n8n/decorators';
 import { Container, Service } from '@n8n/di';
 import {
 	MAX_STEPS,
+	assertInstanceAiPromptVersion,
 	createInstanceAgent,
 	createLazyRuntimeWorkspace,
 	createLazyWorkspaceRuntimeSkillSource,
@@ -653,6 +654,23 @@ type InstanceContextGates = Pick<
 /** The built orchestrator agent type returned by `createInstanceAgent`. */
 type InstanceAgent = Awaited<ReturnType<typeof createInstanceAgent>>['agent'];
 
+/**
+ * Normalises `N8N_INSTANCE_AI_PROMPT_VERSION`. A blank value means "no pin" and
+ * must become `undefined`: passing `''` on to `resolvePromptProfile` would report
+ * a fallback from an empty version instead of a clean default selection.
+ *
+ * An unknown version throws, so a typo fails at startup rather than silently
+ * serving the default profile for the life of the instance. The version is only
+ * read when set, which keeps the prompt-profiles module lazy for every instance
+ * that does not use the pin.
+ */
+export function resolveOperatorPromptVersion(configured: string): string | undefined {
+	const version = configured.trim();
+	if (!version) return undefined;
+	assertInstanceAiPromptVersion(version);
+	return version;
+}
+
 @Service()
 export class InstanceAiService {
 	private _mcpClientManager?: McpClientManager;
@@ -671,6 +689,9 @@ export class InstanceAiService {
 	private readonly instanceAiConfig: InstanceAiConfig;
 
 	private readonly aiConfig: AiConfig;
+
+	/** Instance-wide prompt profile pin (`N8N_INSTANCE_AI_PROMPT_VERSION`), if set. */
+	private readonly operatorPromptVersion: string | undefined;
 
 	private readonly oauth2CallbackUrl: string;
 
@@ -826,6 +847,7 @@ export class InstanceAiService {
 		);
 		this.instanceAiConfig = globalConfig.instanceAi;
 		this.aiConfig = globalConfig.ai;
+		this.operatorPromptVersion = resolveOperatorPromptVersion(this.instanceAiConfig.promptVersion);
 		this.backgroundTasks = new BackgroundTaskManager(
 			MAX_CONCURRENT_BACKGROUND_TASKS_PER_THREAD,
 			this.instanceAiConfig.maxConcurrentSubAgents,
@@ -2516,8 +2538,10 @@ export class InstanceAiService {
 			? this.conversationHistoryService.forContext(user.id, boundProjectId, threadId)
 			: undefined;
 		// Follow-ups and resumed runs retain the selected mode if flags change.
+		// The operator pin sits below the request pin and the thread's own selection,
+		// so evals and in-flight conversations keep the profile they started on.
 		const selectedPrompt = resolvePromptProfile({
-			version: this.runState.getPromptVersion(threadId),
+			version: this.runState.getPromptVersion(threadId) ?? this.operatorPromptVersion,
 			mode:
 				this.runState.getBuildMode(threadId) ??
 				(progressiveBuildingEnabled ? 'progressive' : 'default'),

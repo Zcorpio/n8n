@@ -9,11 +9,24 @@ The initial profiles are `default@1` and `progressive@1`. The general system
 prompt is the same in both. The progressive profile changes the workflow
 skills and removes the planning skill and `create-tasks` tool.
 
+`concise@1` (INS-1195) keeps every `default@1` policy and skill. It changes only
+the system prompt version, which selects a shorter `## Communication Style`
+block. Each published system prompt version binds one style block through
+`createSystemPromptRenderer`, so the general prompt body holds no
+profile-specific conditions.
+
 ## Selection and recovery
 
-A request's `promptVersion` takes precedence over `mode`. Without a version pin,
-an explicit mode selects its current profile. Without either override, the
-backend experiment assignment selects the profile.
+A request's `promptVersion` takes precedence over `mode`. Then comes the version
+already selected for the thread, then the instance-wide operator pin
+`N8N_INSTANCE_AI_PROMPT_VERSION`, then the backend experiment assignment.
+Without a version, an explicit mode selects its current profile.
+
+The operator pin is instance-wide so the two system prompts never fragment the
+prompt cache within one instance. Profiles are keyed by build mode, so pinning a
+`default`-mode profile also overrides a progressive building assignment. An
+unknown pin stops the instance at startup instead of silently serving the
+default profile.
 
 Internal follow-ups retain the selected version. Checkpoints store it in
 `persistence.hostMetadata.promptVersion`. If that version is no longer registered
