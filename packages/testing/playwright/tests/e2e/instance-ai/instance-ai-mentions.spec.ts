@@ -47,7 +47,16 @@ test.describe(
 				const workflow = await api.workflows.createWorkflow(
 					{
 						name: `Mentioned workflow ${nanoid()}`,
-						nodes: [],
+						nodes: [
+							{
+								id: 'if-node',
+								name: 'If',
+								type: 'n8n-nodes-base.if',
+								typeVersion: 2.2,
+								position: [0, 0],
+								parameters: {},
+							},
+						],
 						connections: {},
 					},
 					project.id,
@@ -90,6 +99,10 @@ test.describe(
 					n8n.instanceAi.getWorkflowChipInMessage(userMessage, workflow.name),
 				).toBeVisible();
 				await expect(n8n.instanceAi.getPreviewTabByName(workflow.name)).toBeVisible();
+
+				await input.fill('@');
+				await input.pressSequentially('if');
+				await expect(n8n.instanceAi.getMentionMenuItem('If')).toBeVisible();
 			},
 		);
 
