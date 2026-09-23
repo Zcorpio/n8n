@@ -34,6 +34,7 @@ import { v4 as uuid } from 'uuid';
 import type { AgentRunTelemetryType } from '@/interfaces';
 
 import type { StartExecutionParams } from '../agent-execution.service';
+import { AgentSessionLeaseService } from '../agent-session-lease.service';
 import { AgentTurnExecutionService } from '../agent-turn-execution.service';
 import type { AgentRuntimeInstrumentation } from '../agent-runtime-instrumentation';
 import {
@@ -127,6 +128,7 @@ export class SubAgentRunner {
 		private readonly checkpointStorage: N8NCheckpointStorage,
 		private readonly logger: Logger,
 		private readonly aiConfig: AiConfig,
+		private readonly sessionLeases: AgentSessionLeaseService,
 	) {}
 
 	async run(
@@ -282,9 +284,10 @@ export class SubAgentRunner {
 				executionCounter: context.executionCounter,
 			};
 			executionStarted = operation.type === 'run';
-			const resultStream =
+			// The child run is its own turn, so its writes are fenced by the child lease.
+			const startChildRun = async () =>
 				operation.type === 'run'
-					? await agent.stream(userMessage ?? '', {
+					? await reconstructed.agent.stream(userMessage ?? '', {
 							...executionOptions,
 							persistence: {
 								resourceId,
@@ -300,7 +303,7 @@ export class SubAgentRunner {
 									: {}),
 							},
 						})
-					: await agent.resume('stream', operation.request.resumeData, {
+					: await reconstructed.agent.resume('stream', operation.request.resumeData, {
 							...executionOptions,
 							runId: operation.request.childRunId,
 							toolCallId: operation.request.childToolCallId,
@@ -312,6 +315,7 @@ export class SubAgentRunner {
 								);
 							},
 						});
+			const resultStream = await this.sessionLeases.runInTurn(threadId, executionId, startChildRun);
 			const consumed = await consumeAgentStream(
 				resultStream,
 				recorder,

@@ -141,6 +141,12 @@ describe('AgentExecutionRepository', () => {
 		memory.getImplementation.mockReturnValue(memoryBackend);
 		const attachmentService = mock<AgentChatAttachmentService>();
 		const executionLogStore = mock<AgentExecutionLogStore>();
+		const sessionLeases = new AgentSessionLeaseService(
+			mockLogger(),
+			new AgentSessionLeaseRepository(connection ?? repository.manager.connection, txRunner),
+			mock<InstanceSettings>({ hostId: 'main-test' }),
+			txRunner,
+		);
 		const executionService = new AgentExecutionService(
 			mockLogger(),
 			executions,
@@ -154,12 +160,7 @@ describe('AgentExecutionRepository', () => {
 			mock<AgentExecutionUpdateBroadcaster>(),
 			Container.get(N8NCheckpointStorage),
 			txRunner,
-			new AgentSessionLeaseService(
-				mockLogger(),
-				new AgentSessionLeaseRepository(connection ?? repository.manager.connection, txRunner),
-				mock<InstanceSettings>({ hostId: 'main-test' }),
-				txRunner,
-			),
+			sessionLeases,
 			Object.assign(new AgentsConfig(), { messageQueueEnabled }),
 		);
 		return {
@@ -172,6 +173,7 @@ describe('AgentExecutionRepository', () => {
 				mockLogger(),
 				executionService,
 				mock<AgentChatExecutionService>(),
+				sessionLeases,
 			),
 		};
 	}
