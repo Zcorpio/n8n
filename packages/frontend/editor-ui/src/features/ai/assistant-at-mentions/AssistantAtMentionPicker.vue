@@ -51,6 +51,7 @@ const props = withDefaults(
 		projectId?: string;
 		artifacts?: readonly WorkflowArtifactReference[];
 		activeWorkflowId?: string;
+		excludedKeys?: readonly string[];
 		inputElement?: HTMLTextAreaElement | null;
 		reference?: HTMLElement | null;
 		disabled?: boolean;
@@ -59,6 +60,7 @@ const props = withDefaults(
 		projectId: undefined,
 		artifacts: () => [],
 		activeWorkflowId: undefined,
+		excludedKeys: () => [],
 		inputElement: null,
 		reference: null,
 		disabled: false,
@@ -93,10 +95,18 @@ const workflowProvider = createWorkflowMentionSourceProvider({
 const sources = useAssistantMentionSources([artifactProvider, workflowProvider]);
 const searchPending = ref(false);
 let highlightedForCurrentOpen = false;
+const excludedKeys = computed(() => new Set(props.excludedKeys));
 
-function toMenuItem(item: AssistantMentionItem, searchMode: boolean): MentionMenuItem {
+function isMenuItem(item: MentionMenuItem | undefined): item is MentionMenuItem {
+	return item !== undefined;
+}
+
+function toMenuItem(item: AssistantMentionItem, searchMode: boolean): MentionMenuItem | undefined {
 	const indexEntry = artifactIndex.getEntry(item.workflowId);
-	let children = item.children?.map((child) => toMenuItem(child, false));
+	const isExcluded = excludedKeys.value.has(item.key);
+	let children = item.children?.map((child) => toMenuItem(child, false)).filter(isMenuItem);
+	if (isExcluded && children?.length === 0) return undefined;
+	if (isExcluded && !item.hasChildren) return undefined;
 	if (item.hasChildren && !children) {
 		children =
 			indexEntry?.status === 'error'
@@ -131,22 +141,27 @@ function toMenuItem(item: AssistantMentionItem, searchMode: boolean): MentionMen
 					}
 				: {}),
 		},
-		selectable: item.hasChildren || undefined,
+		selectable: item.hasChildren && !isExcluded ? true : undefined,
 		children,
 	};
 }
 
 const menuItems = computed<MentionMenuItem[]>(() => {
 	if (props.query.trim()) {
-		return sources.searchResults.value.map((item) => toMenuItem(item, true));
+		return sources.searchResults.value.map((item) => toMenuItem(item, true)).filter(isMenuItem);
 	}
 
-	const sections = sources.browseSections.value;
+	const sections = sources.browseSections.value.map((section) => ({
+		...section,
+		hadItems: section.items.length > 0,
+		items: section.items.map((item) => toMenuItem(item, false)).filter(isMenuItem),
+	}));
 	const hasItems = sections.some((section) => section.items.length > 0);
 	if (!hasItems && sources.providerErrors.value.size > 0) return [];
 
 	return sections.flatMap((section) => {
 		if (section.id === 'workflows' && section.items.length === 0) {
+			if (section.hadItems) return [];
 			if (sources.isBrowsing.value) return [];
 			if (sources.providerErrors.value.has('workflows')) {
 				return [
@@ -191,7 +206,7 @@ const menuItems = computed<MentionMenuItem[]>(() => {
 				),
 				header: true,
 			},
-			...section.items.map((item) => toMenuItem(item, false)),
+			...section.items,
 		];
 	});
 });
