@@ -5,7 +5,7 @@ import type { InstanceSettings } from 'n8n-core';
 import { mock } from 'vitest-mock-extended';
 
 import { AgentSessionLeaseLostError } from '../agent-session-lease-lost.error';
-import { AgentSessionLeaseService, withLeaseSignal } from '../agent-session-lease.service';
+import { AgentSessionLeaseService } from '../agent-session-lease.service';
 import { AgentTurnAlreadyRunningError } from '../agent-turn-already-running.error';
 import type { AgentSessionLeaseRepository } from '../repositories/agent-session-lease.repository';
 
@@ -135,29 +135,5 @@ describe('AgentSessionLeaseService', () => {
 
 		expect(repository.renew).not.toHaveBeenCalled();
 		expect(repository.release).not.toHaveBeenCalled();
-	});
-});
-
-describe('withLeaseSignal', () => {
-	it('uses the lease signal when the turn has no signal', () => {
-		const lease = new AbortController();
-
-		expect(withLeaseSignal(undefined, lease.signal)).toBe(lease.signal);
-	});
-
-	it('keeps the turn signal when the turn has no lease', () => {
-		const turn = new AbortController();
-
-		expect(withLeaseSignal(turn.signal, undefined)).toBe(turn.signal);
-		expect(withLeaseSignal(undefined, undefined)).toBeUndefined();
-	});
-
-	it.each(['turn', 'lease'] as const)('aborts when the %s signal aborts', (source) => {
-		const controllers = { turn: new AbortController(), lease: new AbortController() };
-		const combined = withLeaseSignal(controllers.turn.signal, controllers.lease.signal);
-
-		controllers[source].abort();
-
-		expect(combined?.aborted).toBe(true);
 	});
 });
