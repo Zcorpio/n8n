@@ -41,8 +41,8 @@ describe('useAssistantMentionAvailability', () => {
 		expect(store.searchWorkflows).toHaveBeenCalledExactlyOnceWith({
 			projectId: 'project-1',
 			isArchived: false,
-			select: ['id'],
-			options: { take: 1, skip: 0, sortBy: 'id:asc', includeScopes: false },
+			select: ['id', 'updatedAt'],
+			options: { take: 1, skip: 0, sortBy: 'updatedAt:asc', includeScopes: false },
 		});
 		scope.stop();
 	});
