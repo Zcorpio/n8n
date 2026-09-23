@@ -163,7 +163,6 @@ import {
 } from './instance-context.service';
 import { composeLocalMcpServers } from './browser/composite-local-mcp-server';
 import { InstanceAiBrowserSessionService } from './browser/instance-ai-browser-session.service';
-import { NodeContextFlagGate } from './node-context-flag-gate';
 import { enabledToolCategories, resolveComputerUseState } from './computer-use-availability';
 import { dropRejectedAttachmentsFromHistory } from './drop-rejected-attachments';
 import { EvalThreadCredentialAllowlistService } from './eval/thread-credential-allowlist.service';
@@ -769,7 +768,6 @@ export class InstanceAiService {
 		private readonly creditService: InstanceAiCreditService,
 		private readonly publisher: Publisher,
 		private readonly instanceAiErrorReporter: InstanceAiErrorReporterService,
-		private readonly nodeContextFlagGate: NodeContextFlagGate,
 		private readonly push: Push,
 		private readonly conversationHistoryService: InstanceAiConversationHistoryService,
 		private readonly instanceContext: InstanceContextService,
@@ -2428,6 +2426,7 @@ export class InstanceAiService {
 		messageGroupId?: string,
 		pushRef?: string,
 		proxyRunConfig?: Awaited<ReturnType<InstanceAiService['createProxyRunConfig']>>,
+		experimentGates?: Awaited<ReturnType<InstanceAiAdapterService['resolveExperimentGates']>>,
 	) {
 		const memory = this.agentMemory;
 		const boundProjectId = await memory.getThreadProjectId(threadId);
@@ -2466,7 +2465,7 @@ export class InstanceAiService {
 			folderExplorationEnabled,
 			aiPreferencesEnabled,
 			instanceContextEnabled,
-		} = await this.adapterService.resolveExperimentGates(user);
+		} = experimentGates ?? (await this.adapterService.resolveExperimentGates(user));
 		// One scoped reader backs both the tool and the first-turn hint.
 		const conversationHistory = conversationHistoryEnabled
 			? this.conversationHistoryService.forContext(user.id, boundProjectId, threadId)
@@ -3611,10 +3610,10 @@ export class InstanceAiService {
 	 * context block. The canvas node-context and Assistant mentions flags both
 	 * accept `nodes` attachments. Workflow and agent references always pass.
 	 */
-	private async resolveContextAttachments(
+	private resolveContextAttachments(
 		attachments: InstanceAiAttachment[] | undefined,
-		user: User,
-	): Promise<InstanceAiResourceAttachment[]> {
+		nodeContextEnabled: boolean,
+	): InstanceAiResourceAttachment[] {
 		const attachmentsOrEmpty = attachments ?? [];
 
 		const workflowAttachments = attachmentsOrEmpty.filter(
@@ -3629,13 +3628,10 @@ export class InstanceAiService {
 			(attachment): attachment is InstanceAiNodesAttachment => attachment.type === 'nodes',
 		);
 
-		const canvasNodeContextEnabled =
-			nodeAttachments.length > 0 && (await this.nodeContextFlagGate.isEnabled(user));
-
 		return [
 			...workflowAttachments,
 			...agentAttachments,
-			...(canvasNodeContextEnabled ? nodeAttachments : []),
+			...(nodeContextEnabled ? nodeAttachments : []),
 		];
 	}
 
@@ -3687,7 +3683,11 @@ export class InstanceAiService {
 			(attachment): attachment is InstanceAiFileAttachment => attachment.type === 'file',
 		);
 
-		const contextAttachments = await this.resolveContextAttachments(attachments, user);
+		const experimentGates = await this.adapterService.resolveExperimentGates(user);
+		const contextAttachments = this.resolveContextAttachments(
+			attachments,
+			experimentGates.nodeContextEnabled,
+		);
 
 		const signal = abortController.signal;
 		let tracing: InstanceAiTraceContext | undefined;
@@ -3845,6 +3845,7 @@ export class InstanceAiService {
 				messageGroupId,
 				executionPushRef,
 				proxyRunConfig,
+				experimentGates,
 			);
 			const {
 				context,

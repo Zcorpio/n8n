@@ -130,7 +130,12 @@ const focusExternalTarget = (allowClosed = false) => {
 };
 
 const focusTrigger = () => {
-	(triggerRef.value?.$el as HTMLElement | undefined)?.focus();
+	const trigger = triggerRef.value?.$el as HTMLElement | undefined;
+	if (!trigger) return;
+	const focusTarget =
+		trigger.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]') ??
+		(trigger.matches('button, [href], input, select, textarea, [tabindex]') ? trigger : undefined);
+	focusTarget?.focus();
 };
 
 const syncExternalActiveDescendant = () => {
@@ -351,7 +356,7 @@ watch(
 );
 
 watch(
-	[internalOpen, isExternalSearchMode, () => props.externalFocusTarget],
+	[internalOpen, isExternalSearchMode, () => props.externalFocusTarget, contentId],
 	async ([isOpen, externalMode, target], _oldValues, onCleanup) => {
 		if (!isOpen || !externalMode || !target) return;
 

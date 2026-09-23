@@ -46,6 +46,7 @@ function createService() {
 		conversationHistoryEnabled: false,
 		progressiveBuildingEnabled: false,
 		nodeUsageEnabled: false,
+		nodeContextEnabled: false,
 		folderExplorationEnabled: false,
 		aiPreferencesEnabled: false,
 		instanceContextEnabled: false,

@@ -23,17 +23,26 @@ const MAX_WORKFLOW_BROWSE_CANDIDATES = 50;
 export function createArtifactMentionSourceProvider(options: {
 	artifacts: MaybeRefOrGetter<readonly WorkflowArtifactReference[]>;
 	artifactIndex: ArtifactMentionIndex;
+	excludedKeys?: MaybeRefOrGetter<ReadonlySet<string>>;
 }): MentionSourceProvider {
 	return {
 		id: 'artifacts',
 		revision: options.artifactIndex.revision,
 		async browse() {
-			return buildArtifactBrowseItems(toValue(options.artifacts), options.artifactIndex.getIndex);
+			return buildArtifactBrowseItems(
+				toValue(options.artifacts),
+				options.artifactIndex.getIndex,
+				options.excludedKeys ? toValue(options.excludedKeys) : undefined,
+			);
 		},
 		async search(query) {
 			await options.artifactIndex.loadAll();
 			return searchMentionItems(
-				buildArtifactSearchItems(toValue(options.artifacts), options.artifactIndex.getIndex),
+				buildArtifactSearchItems(
+					toValue(options.artifacts),
+					options.artifactIndex.getIndex,
+					options.excludedKeys ? toValue(options.excludedKeys) : undefined,
+				),
 				query,
 				MAX_MENTION_RESULTS,
 			);
@@ -44,6 +53,7 @@ export function createArtifactMentionSourceProvider(options: {
 export function createWorkflowMentionSourceProvider(options: {
 	projectId: MaybeRefOrGetter<string | undefined>;
 	artifactWorkflowIds: MaybeRefOrGetter<readonly string[]>;
+	excludedWorkflowIds?: MaybeRefOrGetter<readonly string[]>;
 }): MentionSourceProvider {
 	const recentWorkflowsStore = useRecentWorkflowsStore();
 	const workflowsListStore = useWorkflowsListStore();
@@ -55,15 +65,22 @@ export function createWorkflowMentionSourceProvider(options: {
 			if (!projectId) return [];
 
 			const artifactWorkflowIds = toValue(options.artifactWorkflowIds);
-			const recentWorkflows = await recentWorkflowsStore.resolveRecentWorkflows(
-				projectId,
-				artifactWorkflowIds,
-			);
+			const excludedWorkflowIds = options.excludedWorkflowIds
+				? toValue(options.excludedWorkflowIds)
+				: [];
+			const recentWorkflows = await recentWorkflowsStore.resolveRecentWorkflows(projectId, [
+				...artifactWorkflowIds,
+				...excludedWorkflowIds,
+			]);
 			if (recentWorkflows.length >= MAX_MENTION_RESULTS) {
 				return recentWorkflows.map((workflow) => buildWorkflowMentionItem(workflow, 'workflows'));
 			}
 
-			const excludedIds = new Set([...artifactWorkflowIds, ...recentWorkflows.map(({ id }) => id)]);
+			const excludedIds = new Set([
+				...artifactWorkflowIds,
+				...excludedWorkflowIds,
+				...recentWorkflows.map(({ id }) => id),
+			]);
 			try {
 				const backfillWorkflows = await workflowsListStore.searchWorkflows({
 					projectId,
@@ -88,6 +105,9 @@ export function createWorkflowMentionSourceProvider(options: {
 			const projectId = toValue(options.projectId)?.trim();
 			const normalizedQuery = query.trim();
 			if (!projectId || !normalizedQuery) return [];
+			const excludedWorkflowIds = new Set(
+				options.excludedWorkflowIds ? toValue(options.excludedWorkflowIds) : [],
+			);
 
 			const workflows = await workflowsListStore.searchWorkflows({
 				projectId,
@@ -95,18 +115,27 @@ export function createWorkflowMentionSourceProvider(options: {
 				isArchived: false,
 				select: ['id', 'name', 'description', 'updatedAt'],
 				options: {
-					take: MAX_MENTION_RESULTS,
+					take: Math.min(
+						MAX_MENTION_RESULTS + excludedWorkflowIds.size,
+						MAX_WORKFLOW_BROWSE_CANDIDATES,
+					),
 					skip: 0,
 					sortBy: 'updatedAt:desc',
 					includeScopes: false,
 				},
 			});
-			return workflows.map((workflow) => buildWorkflowMentionItem(workflow, 'workflows'));
+			return workflows
+				.filter(({ id }) => !excludedWorkflowIds.has(id))
+				.slice(0, MAX_MENTION_RESULTS)
+				.map((workflow) => buildWorkflowMentionItem(workflow, 'workflows'));
 		},
 	};
 }
 
-export function useAssistantMentionSources(providers: readonly MentionSourceProvider[]) {
+export function useAssistantMentionSources(
+	providers: readonly MentionSourceProvider[],
+	options: { excludedKeys?: MaybeRefOrGetter<ReadonlySet<string>> } = {},
+) {
 	const browseSections = shallowRef<AssistantMentionBrowseSection[]>([]);
 	const searchResults = shallowRef<AssistantMentionItem[]>([]);
 	const providerErrors = shallowRef(new Map<MentionSourceProvider['id'], unknown>());
@@ -121,15 +150,21 @@ export function useAssistantMentionSources(providers: readonly MentionSourceProv
 	let disposed = false;
 
 	function updateBrowseSections(): void {
+		const excludedKeys = options.excludedKeys ? toValue(options.excludedKeys) : undefined;
 		browseSections.value = providers.map((provider) => ({
 			id: provider.id,
-			items: (browseItemsByProvider.get(provider.id) ?? []).slice(0, MAX_MENTION_RESULTS),
+			items: (browseItemsByProvider.get(provider.id) ?? [])
+				.filter((item) => !excludedKeys?.has(item.key) || item.hasChildren)
+				.slice(0, MAX_MENTION_RESULTS),
 		}));
 	}
 
 	function updateSearchResults(query: string): void {
+		const excludedKeys = options.excludedKeys ? toValue(options.excludedKeys) : undefined;
 		searchResults.value = searchMentionItems(
-			providers.flatMap((provider) => searchItemsByProvider.get(provider.id) ?? []),
+			providers
+				.flatMap((provider) => searchItemsByProvider.get(provider.id) ?? [])
+				.filter((item) => !excludedKeys?.has(item.key)),
 			query,
 			MAX_MENTION_RESULTS,
 		);

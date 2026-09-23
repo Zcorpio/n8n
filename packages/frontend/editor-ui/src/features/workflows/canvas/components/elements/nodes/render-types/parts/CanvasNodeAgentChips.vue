@@ -88,15 +88,16 @@ const overflowItems = computed<Array<ActionDropdownItem<string>>>(() =>
 			data-test-id="canvas-node-agent-chips-overflow"
 		>
 			<template #activator>
-				<span :class="[$style.chipWrapper, { [$style.running]: isOverflowActive }]">
-					<AgentChipButton :aria-busy="isOverflowActive">
-						{{
-							i18n.baseText('agentNode.card.moreChips', {
-								interpolate: { count: overflowChips.length },
-							})
-						}}
-					</AgentChipButton>
-				</span>
+				<AgentChipButton
+					:aria-busy="isOverflowActive"
+					:class="[$style.chipWrapper, { [$style.running]: isOverflowActive }]"
+				>
+					{{
+						i18n.baseText('agentNode.card.moreChips', {
+							interpolate: { count: overflowChips.length },
+						})
+					}}
+				</AgentChipButton>
 			</template>
 		</N8nActionDropdown>
 	</div>

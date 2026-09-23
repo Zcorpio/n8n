@@ -108,13 +108,15 @@ async function onDropdownToggle(open: boolean) {
 			@update:model-value="onDropdownToggle"
 		>
 			<template #trigger>
-				<!-- We use a custom border to align color with the other related badges -->
-				<N8nBadge theme="tertiary" :show-border="false" :class="$style.badge">
-					<span :class="$style.badgeText">
-						<N8nIcon icon="link" size="small" />
-						{{ effectiveCount }}
-					</span>
-				</N8nBadge>
+				<button type="button" :class="$style.trigger">
+					<!-- We use a custom border to align color with the other related badges -->
+					<N8nBadge theme="tertiary" :show-border="false" :class="$style.badge">
+						<span :class="$style.badgeText">
+							<N8nIcon icon="link" size="small" />
+							{{ effectiveCount }}
+						</span>
+					</N8nBadge>
+				</button>
 			</template>
 			<template v-if="hasHiddenDeps" #footer>
 				<div :class="$style.hiddenNotice">
@@ -131,6 +133,25 @@ async function onDropdownToggle(open: boolean) {
 </template>
 
 <style lang="scss" module>
+.trigger {
+	appearance: none;
+	padding: 0;
+	border: none;
+	background: none;
+	font: inherit;
+	cursor: pointer;
+
+	&:focus-visible {
+		outline: var(--spacing--5xs) solid var(--color--primary);
+		outline-offset: var(--spacing--5xs);
+		border-radius: var(--radius);
+	}
+
+	&[aria-expanded='true'] .badge {
+		background-color: var(--background--active);
+	}
+}
+
 .badge {
 	cursor: pointer;
 	border: var(--border);
@@ -141,10 +162,6 @@ async function onDropdownToggle(open: boolean) {
 
 	&:hover {
 		background-color: var(--background--hover);
-	}
-
-	:global([aria-expanded='true']) & {
-		background-color: var(--background--active);
 	}
 }
 

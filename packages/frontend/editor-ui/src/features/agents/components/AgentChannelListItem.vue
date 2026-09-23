@@ -124,7 +124,7 @@ function handleConfiguredAction(action: ChannelAction) {
 					@select="handleConfiguredAction"
 				>
 					<template #trigger>
-						<N8nTooltip :content="statusTooltip" :disabled="!notRunning" placement="top">
+						<N8nTooltip as-child :content="statusTooltip" :disabled="!notRunning" placement="top">
 							<N8nButton variant="ghost" size="medium" :class="$style.connectedTrigger">
 								<div
 									v-if="connected"

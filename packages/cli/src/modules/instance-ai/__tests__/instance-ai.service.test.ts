@@ -830,7 +830,9 @@ describe('InstanceAiService — runtime workspace setup', () => {
 			resolveExperimentGates: vi.fn().mockResolvedValue({
 				configEvalsEnabled: true,
 				conversationHistoryEnabled: false,
+				progressiveBuildingEnabled: false,
 				nodeUsageEnabled: false,
+				nodeContextEnabled: false,
 				folderExplorationEnabled: false,
 				aiPreferencesEnabled: false,
 				instanceContextEnabled,
@@ -1165,6 +1167,7 @@ describe('InstanceAiService — runtime workspace setup', () => {
 				conversationHistoryEnabled: false,
 				progressiveBuildingEnabled: enabled,
 				nodeUsageEnabled: false,
+				nodeContextEnabled: false,
 				folderExplorationEnabled: true,
 				aiPreferencesEnabled: false,
 			}),
@@ -3733,7 +3736,10 @@ describe('InstanceAiService — terminal response guard wiring', () => {
 	/** The smallest executeRun surface: no tracing, no attachments, no handoff. */
 	function stubInitialRunSurface(service: TerminalGuardOrderServiceInternals): void {
 		Object.assign(service, {
-			resolveContextAttachments: vi.fn(async () => []),
+			adapterService: {
+				resolveExperimentGates: vi.fn(async () => ({ nodeContextEnabled: false })),
+			},
+			resolveContextAttachments: vi.fn(() => []),
 			createProxyRunConfig: vi.fn(async () => ({})),
 			browserSessionService: { getExtensionTraceContext: vi.fn() },
 			readThreadProvenance: vi.fn(async () => ({})),
@@ -4884,7 +4890,10 @@ describe('InstanceAiService run input gates', () => {
 				orchestrationContext: {},
 			};
 			const service = Object.assign(Object.create(InstanceAiService.prototype), {
-				resolveContextAttachments: vi.fn(async () => []),
+				adapterService: {
+					resolveExperimentGates: vi.fn(async () => ({ nodeContextEnabled: false })),
+				},
+				resolveContextAttachments: vi.fn(() => []),
 				instanceAiErrorReporter: { beginRun: vi.fn(), endRun: vi.fn() },
 				createProxyRunConfig: vi.fn(async () => ({})),
 				browserSessionService: { getExtensionTraceContext: vi.fn() },
@@ -4966,6 +4975,7 @@ describe('InstanceAiService — user message persistence on cancel', () => {
 		schedulePlannedTasks: Mock;
 		taskProjector: { syncFromWorkflowLoop: Mock };
 		browserSessionService: { getExtensionTraceContext: Mock };
+		adapterService: { resolveExperimentGates: Mock };
 	};
 
 	function createCancelPersistenceService(): ExecuteRunInternals {
@@ -4986,6 +4996,9 @@ describe('InstanceAiService — user message persistence on cancel', () => {
 		};
 		service.browserSessionService = {
 			getExtensionTraceContext: vi.fn(() => ({ connectionState: 'disconnected' })),
+		};
+		service.adapterService = {
+			resolveExperimentGates: vi.fn(async () => ({ nodeContextEnabled: false })),
 		};
 		return service;
 	}

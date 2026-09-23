@@ -282,17 +282,20 @@ const isInputVisuallyEmpty = computed(() => inputText.value.length === 0);
 const hasAttachments = computed(
 	() => attachedFiles.value.length > 0 || attachedResources.value.length > 0,
 );
-const excludedMentionKeys = computed(() => {
+const excludedMentionContext = computed(() => {
 	const keys = new Set<string>();
+	const workflowIds = new Set<string>();
 	if (props.contextChip?.type === 'workflow-artifact') {
 		keys.add(
 			buildMentionKey('workflow', props.contextChip.workflowId, props.contextChip.workflowId),
 		);
+		workflowIds.add(props.contextChip.workflowId);
 	}
 
 	for (const attachment of attachedResources.value) {
 		if (attachment.type === 'workflow') {
 			keys.add(buildMentionKey('workflow', attachment.id, attachment.id));
+			workflowIds.add(attachment.id);
 			continue;
 		}
 		if (attachment.type !== 'nodes') continue;
@@ -308,7 +311,7 @@ const excludedMentionKeys = computed(() => {
 		}
 	}
 
-	return [...keys];
+	return { keys: [...keys], workflowIds: [...workflowIds] };
 });
 // Fed to the composer so its size guard can account for what is already staged.
 // Summed per file after encoding — base64 pads each file individually, so encoding
@@ -373,7 +376,7 @@ async function handleMentionSelection(selection: AssistantMentionSelection): Pro
 		);
 		return;
 	}
-	mentionTelemetry.trackMentionSelected(selection, alreadyArtifact);
+	if (result.status === 'added') mentionTelemetry.trackMentionSelected(selection, alreadyArtifact);
 
 	if (result.truncated) {
 		toast.showError(
@@ -932,7 +935,8 @@ const resizable = computed(() => {
 					:project-id="props.mentionProjectId"
 					:artifacts="props.mentionArtifacts"
 					:active-workflow-id="props.mentionActiveWorkflowId"
-					:excluded-keys="excludedMentionKeys"
+					:excluded-keys="excludedMentionContext.keys"
+					:excluded-workflow-ids="excludedMentionContext.workflowIds"
 					:input-element="inputElement"
 					:reference="composerRef"
 					:disabled="!canUseMentions"

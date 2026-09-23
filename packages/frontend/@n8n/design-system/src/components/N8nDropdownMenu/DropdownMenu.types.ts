@@ -197,6 +197,7 @@ type SlotUiProps = { class: string };
 
 export interface DropdownMenuSlots<T = string, D = never> {
 	/** Custom trigger element (replaces default button) */
+	/** Custom trigger with one focusable root that forwards inherited attributes and listeners. */
 	trigger?: () => void;
 	/** Complete custom dropdown content (replaces item list) */
 	content?: () => void;

@@ -68,6 +68,43 @@ describe('useAssistantAtMentions', () => {
 		expect(mentions.query.value).toBe('ord');
 	});
 
+	it('does not reopen a dismissed trigger when its query changes', async () => {
+		const { input, mentions } = setup();
+		input.value = '@ord';
+		input.setSelectionRange(input.value.length, input.value.length);
+		await mentions.handleTextChange(input.value);
+		mentions.handleMenuOpenChange(false);
+
+		input.value = '@orde';
+		input.setSelectionRange(input.value.length, input.value.length);
+		await mentions.handleTextChange(input.value);
+
+		expect(mentions.menuOpen.value).toBe(false);
+		mentions.openFromButton();
+		mentions.handleMenuOpenChange(false);
+		input.value = '@order';
+		input.setSelectionRange(input.value.length, input.value.length);
+		await mentions.handleTextChange(input.value);
+		expect(mentions.menuOpen.value).toBe(false);
+
+		mentions.openFromButton();
+		input.value = '@orders';
+		input.setSelectionRange(input.value.length, input.value.length);
+		await mentions.handleTextChange(input.value);
+		expect(mentions.menuOpen.value).toBe(true);
+		expect(mentions.query.value).toBe('orders');
+		mentions.close();
+
+		input.value = '';
+		input.setSelectionRange(0, 0);
+		await mentions.handleTextChange('');
+		input.value = '@';
+		input.setSelectionRange(1, 1);
+		await mentions.handleTextChange('@');
+
+		expect(mentions.menuOpen.value).toBe(true);
+	});
+
 	it('starts a new range when another whitespace-delimited trigger is typed', async () => {
 		const { text, input, mentions } = setup();
 		input.value = '@';

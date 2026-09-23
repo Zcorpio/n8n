@@ -66,6 +66,8 @@ import type {
 } from 'n8n-workflow';
 import {
 	AI_GATEWAY_MANAGED_TAG,
+	AI_ASSISTANT_AT_MENTIONS_FLAG,
+	CANVAS_NODE_CONTEXT_FLAG,
 	CONFIG_EVALUATIONS_FLAG,
 	INSTANCE_AI_CONVERSATION_HISTORY_FLAG,
 	INSTANCE_AI_NODE_USAGE_FLAG,
@@ -6027,6 +6029,7 @@ describe('resolveExperimentGates', () => {
 		[INSTANCE_AI_CONVERSATION_HISTORY_FLAG]: INSTANCE_AI_CONVERSATION_HISTORY_ENABLED_VARIANT,
 		[INSTANCE_AI_PROGRESSIVE_BUILDING_FLAG]: INSTANCE_AI_PROGRESSIVE_BUILDING_ENABLED_VARIANT,
 		[INSTANCE_AI_NODE_USAGE_FLAG]: true,
+		[AI_ASSISTANT_AT_MENTIONS_FLAG]: true,
 		[INSTANCE_AI_FOLDER_EXPLORATION_FLAG]: INSTANCE_AI_FOLDER_EXPLORATION_ENABLED_VARIANT,
 		[CONTEXT_PREFERENCES_FLAG]: CONTEXT_PREFERENCES_ENABLED_VARIANT,
 	};
@@ -6039,6 +6042,7 @@ describe('resolveExperimentGates', () => {
 			conversationHistoryEnabled: true,
 			progressiveBuildingEnabled: true,
 			nodeUsageEnabled: true,
+			nodeContextEnabled: true,
 			folderExplorationEnabled: true,
 			aiPreferencesEnabled: true,
 			instanceContextEnabled: false,
@@ -6095,8 +6099,20 @@ describe('resolveExperimentGates', () => {
 		await expect(createAdapter().resolveExperimentGates(user)).resolves.toMatchObject({
 			instanceContextEnabled: true,
 			nodeUsageEnabled: false,
+			nodeContextEnabled: false,
 		});
 	});
+
+	it.each([CANVAS_NODE_CONTEXT_FLAG, AI_ASSISTANT_AT_MENTIONS_FLAG])(
+		'enables node context with %s',
+		async (flag) => {
+			stubContainer({ [flag]: true });
+
+			await expect(createAdapter().resolveExperimentGates(user)).resolves.toMatchObject({
+				nodeContextEnabled: true,
+			});
+		},
+	);
 
 	it('disables experiment gates for control variants', async () => {
 		stubContainer({
@@ -6104,6 +6120,8 @@ describe('resolveExperimentGates', () => {
 			[INSTANCE_AI_CONVERSATION_HISTORY_FLAG]: 'control',
 			[INSTANCE_AI_PROGRESSIVE_BUILDING_FLAG]: 'control',
 			[INSTANCE_AI_NODE_USAGE_FLAG]: false,
+			[CANVAS_NODE_CONTEXT_FLAG]: false,
+			[AI_ASSISTANT_AT_MENTIONS_FLAG]: false,
 			[INSTANCE_AI_FOLDER_EXPLORATION_FLAG]: 'control',
 			[CONTEXT_PREFERENCES_FLAG]: CONTEXT_PREFERENCES_CONTROL_VARIANT,
 		});
@@ -6113,6 +6131,7 @@ describe('resolveExperimentGates', () => {
 			conversationHistoryEnabled: false,
 			progressiveBuildingEnabled: false,
 			nodeUsageEnabled: false,
+			nodeContextEnabled: false,
 			folderExplorationEnabled: false,
 			aiPreferencesEnabled: false,
 			instanceContextEnabled: false,
@@ -6148,6 +6167,7 @@ describe('resolveExperimentGates', () => {
 			conversationHistoryEnabled: false,
 			progressiveBuildingEnabled: false,
 			nodeUsageEnabled: false,
+			nodeContextEnabled: false,
 			folderExplorationEnabled: false,
 			aiPreferencesEnabled: false,
 			instanceContextEnabled: false,
@@ -6163,6 +6183,7 @@ describe('resolveExperimentGates', () => {
 			conversationHistoryEnabled: false,
 			progressiveBuildingEnabled: false,
 			nodeUsageEnabled: false,
+			nodeContextEnabled: false,
 			folderExplorationEnabled: false,
 			aiPreferencesEnabled: false,
 			instanceContextEnabled: false,

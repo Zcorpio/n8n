@@ -8,6 +8,7 @@ import { createComponentRenderer } from '@/__tests__/render';
 import InstanceAiInput from '../InstanceAiInput.vue';
 import AttachmentPreview from '../AttachmentPreview.vue';
 import { useInstanceAiStore } from '../../instanceAi.store';
+import { useWorkflowsListStore } from '@/app/stores/workflowsList.store';
 import type { AssistantMentionSelection } from '@/features/ai/assistant-at-mentions/assistantAtMentions.types';
 import { TELEMETRY_EVENT } from '@n8n/telemetry';
 
@@ -218,10 +219,14 @@ const nodeMentionSelection: AssistantMentionSelection = {
 
 const MentionPickerStub = defineComponent({
 	name: 'AssistantAtMentionPicker',
+	props: {
+		modelValue: { type: Boolean, default: false },
+		query: { type: String, default: '' },
+	},
 	emits: ['select'],
-	setup(_props, { emit }) {
+	setup(props, { emit }) {
 		return () =>
-			h('div', [
+			h('div', { 'data-test-id': 'mention-picker-stub', 'data-query': props.query }, [
 				h(
 					'button',
 					{
@@ -269,6 +274,33 @@ describe('InstanceAiInput — mention attachments', () => {
 		);
 	});
 
+	it('re-parses a typed mention after project availability resolves', async () => {
+		let resolveWorkflows!: (workflows: Array<{ id: string }>) => void;
+		const workflows = new Promise<Array<{ id: string }>>((resolve) => {
+			resolveWorkflows = resolve;
+		});
+		vi.spyOn(useWorkflowsListStore(), 'searchWorkflows').mockReturnValue(workflows as never);
+		const { getByRole, getByTestId } = renderMentionsInput({
+			props: { mentionArtifacts: [] },
+		});
+
+		await userEvent.type(getByRole('textbox'), '@ord');
+		expect(telemetryTrack).not.toHaveBeenCalledWith(
+			TELEMETRY_EVENT.INSTANCE_AI.USER_OPENED_AI_ASSISTANT_MENTION_PICKER,
+			expect.anything(),
+		);
+
+		resolveWorkflows([{ id: 'w2' }]);
+
+		await waitFor(() =>
+			expect(getByTestId('mention-picker-stub')).toHaveAttribute('data-query', 'ord'),
+		);
+		expect(telemetryTrack).toHaveBeenCalledWith(
+			TELEMETRY_EVENT.INSTANCE_AI.USER_OPENED_AI_ASSISTANT_MENTION_PICKER,
+			{ source: 'typed' },
+		);
+	});
+
 	it('inserts quoted text, attaches the workflow, and registers a transient reference', async () => {
 		const { getByRole, getByTestId, emitted } = renderMentionsInput();
 		const textbox = getByRole('textbox');
@@ -290,6 +322,19 @@ describe('InstanceAiInput — mention attachments', () => {
 				already_artifact: true,
 			},
 		);
+	});
+
+	it('does not track a duplicate selection as newly staged context', async () => {
+		const { getByTestId } = renderMentionsInput();
+
+		await userEvent.click(getByTestId('mention-picker-select'));
+		await userEvent.click(getByTestId('mention-picker-select'));
+
+		expect(
+			telemetryTrack.mock.calls.filter(
+				([event]) => event === TELEMETRY_EVENT.INSTANCE_AI.USER_SELECTED_AI_ASSISTANT_MENTION,
+			),
+		).toHaveLength(1);
 	});
 
 	it('keeps mention context on failed send and releases it after an accepted send', async () => {
@@ -335,7 +380,9 @@ describe('InstanceAiInput — mention attachments', () => {
 	});
 
 	it('adds node context with parent workflow metadata', async () => {
-		const { getByTestId, getByRole, emitted } = renderMentionsInput();
+		const { getByTestId, getByRole, emitted } = renderMentionsInput({
+			props: { mentionArtifacts: [{ id: 'artifact', name: 'Other workflow' }] },
+		});
 		await userEvent.click(getByTestId('mention-picker-select-node'));
 
 		expect(getByRole('textbox')).toHaveValue('"Validate"');
@@ -349,6 +396,17 @@ describe('InstanceAiInput — mention attachments', () => {
 				sets: [{ nodes: [{ id: 'n1', name: 'Validate' }] }],
 			},
 		]);
+		expect(telemetryTrack).toHaveBeenCalledWith(
+			TELEMETRY_EVENT.INSTANCE_AI.USER_SELECTED_AI_ASSISTANT_MENTION,
+			{
+				kind: 'node',
+				mode: 'search',
+				source: 'artifacts',
+				result_position: 2,
+				query_length: 3,
+				already_artifact: false,
+			},
+		);
 	});
 
 	it('removes the transient reference with the workflow chip', async () => {

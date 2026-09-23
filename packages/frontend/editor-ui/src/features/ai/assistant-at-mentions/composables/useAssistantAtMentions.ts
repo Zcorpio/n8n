@@ -19,8 +19,12 @@ export function useAssistantAtMentions(options: {
 	const query = ref('');
 	const activeRange = ref<MentionRange>();
 	const savedSelection = ref({ start: 0, end: 0 });
+	const dismissedTypedTriggerIndex = ref<number>();
 
-	function close(): void {
+	function close(rememberTypedTrigger = false): void {
+		if (rememberTypedTrigger && activeRange.value?.origin === 'typed') {
+			dismissedTypedTriggerIndex.value = activeRange.value.start;
+		}
 		menuOpen.value = false;
 		query.value = '';
 		activeRange.value = undefined;
@@ -43,6 +47,7 @@ export function useAssistantAtMentions(options: {
 			queryStart: triggerIndex + 1,
 			end: caret,
 		};
+		dismissedTypedTriggerIndex.value = undefined;
 		query.value = initialQuery;
 		menuOpen.value = true;
 		if (!wasOpen) options.onOpened?.('typed');
@@ -65,6 +70,12 @@ export function useAssistantAtMentions(options: {
 
 	async function handleTextChange(value: string, caretOverride?: number): Promise<void> {
 		options.text.value = value;
+		if (
+			dismissedTypedTriggerIndex.value !== undefined &&
+			value[dismissedTypedTriggerIndex.value] !== '@'
+		) {
+			dismissedTypedTriggerIndex.value = undefined;
+		}
 		if (!toValue(options.enabled)) {
 			close();
 			return;
@@ -82,6 +93,7 @@ export function useAssistantAtMentions(options: {
 				: -1;
 		const range = activeRange.value;
 		if (triggerIndex >= 0 && (!range || range.origin !== 'typed' || range.start !== triggerIndex)) {
+			if (dismissedTypedTriggerIndex.value === triggerIndex && !range) return;
 			openTypedRange(triggerIndex, caret, value.slice(triggerIndex + 1, caret));
 			return;
 		}
@@ -131,7 +143,7 @@ export function useAssistantAtMentions(options: {
 
 	function handleMenuOpenChange(open: boolean): void {
 		if (!open) {
-			close();
+			close(true);
 			return;
 		}
 		if (!activeRange.value) openFromButton();

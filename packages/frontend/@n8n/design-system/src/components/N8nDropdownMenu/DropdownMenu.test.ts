@@ -77,7 +77,7 @@ describe('N8nDropdownMenu', () => {
 			expect(trigger).toMatchSnapshot();
 		});
 
-		it('should render custom trigger via slot', () => {
+		it('should render and open from a custom trigger via slot', async () => {
 			const wrapper = render(DropdownMenu, {
 				props: {
 					items: createItems(3),
@@ -87,7 +87,11 @@ describe('N8nDropdownMenu', () => {
 				},
 			});
 
-			expect(wrapper.getByTestId('custom-trigger')).toBeInTheDocument();
+			const trigger = wrapper.getByTestId('custom-trigger');
+			expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+			await userEvent.click(trigger);
+
+			expect((await getDropdownContent()).dropdown).toBeVisible();
 		});
 
 		it('should render with emoji activator', () => {
@@ -892,6 +896,44 @@ describe('N8nDropdownMenu', () => {
 	});
 
 	describe('external search mode', () => {
+		it('should manage and restore the external target ARIA attributes', async () => {
+			const wrapper = renderExternalDropdown();
+			const textarea = wrapper.container.querySelector('textarea')!;
+			const { dropdown } = await getDropdownContent();
+
+			await waitFor(() => {
+				expect(textarea).toHaveAttribute('role', 'combobox');
+				expect(textarea).toHaveAttribute('aria-expanded', 'true');
+				expect(textarea).toHaveAttribute('aria-haspopup', 'menu');
+				expect(textarea).toHaveAttribute('aria-controls', dropdown.id);
+			});
+
+			wrapper.isOpen.value = false;
+
+			await waitFor(() => {
+				expect(textarea).not.toHaveAttribute('role');
+				expect(textarea).not.toHaveAttribute('aria-expanded');
+				expect(textarea).not.toHaveAttribute('aria-haspopup');
+				expect(textarea).not.toHaveAttribute('aria-controls');
+			});
+		});
+
+		it('should focus the real control inside a custom trigger wrapper', async () => {
+			const dropdownRef = ref<DropdownMenuExposed | null>(null);
+			const wrapper = render({
+				components: { DropdownMenu },
+				setup: () => ({ dropdownRef, items: createItems(1) }),
+				template: `
+					<DropdownMenu ref="dropdownRef" :items="items">
+						<template #trigger><button data-test-id="focus-target">Open</button></template>
+					</DropdownMenu>
+				`,
+			});
+
+			dropdownRef.value?.focusTrigger();
+
+			expect(document.activeElement).toBe(wrapper.getByTestId('focus-target'));
+		});
 		it('should keep focus in the external textarea without rendering an internal search input', async () => {
 			const wrapper = renderExternalDropdown();
 			const textarea = wrapper.container.querySelector('textarea')!;

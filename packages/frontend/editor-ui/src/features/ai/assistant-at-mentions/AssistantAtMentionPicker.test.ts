@@ -33,6 +33,7 @@ describe('AssistantAtMentionPicker', () => {
 	beforeEach(() => {
 		getWorkflow.mockReset();
 		setActivePinia(createTestingPinia({ stubActions: false }));
+		vi.mocked(useNodeTypesStore().loadNodeTypesIfNotLoaded).mockResolvedValue();
 	});
 
 	it('renders artifact browse roots and emits a workflow selection', async () => {
@@ -103,6 +104,14 @@ describe('AssistantAtMentionPicker', () => {
 
 		await userEvent.click(getByTestId('instance-ai-mention-button'));
 		expect(emitted()['update:modelValue']?.[0]).toEqual([true]);
+	});
+
+	it('disables the real mention button when the picker is disabled', () => {
+		const { getByTestId } = renderComponent({
+			props: { modelValue: false, query: '', disabled: true },
+		});
+
+		expect(getByTestId('instance-ai-mention-button')).toBeDisabled();
 	});
 
 	it('shows the empty recent-workflow state after browse completes', async () => {
@@ -178,6 +187,34 @@ describe('AssistantAtMentionPicker', () => {
 			),
 		).toEqual(['Orders', '>', 'If checks', '>']);
 		expect(getNodeType).toHaveBeenCalledWith('n8n-nodes-base.if', 2.2);
+		expect(nodeTypesStore.loadNodeTypesIfNotLoaded).toHaveBeenCalled();
+	});
+
+	it('shows a retry footer when one search provider fails with partial results', async () => {
+		getWorkflow.mockResolvedValue({
+			id: 'w1',
+			name: 'Orders',
+			versionId: 'version-1',
+			nodes: [],
+			connections: {},
+		} as never);
+		const { useWorkflowsListStore } = await import('@/app/stores/workflowsList.store');
+		vi.mocked(useWorkflowsListStore().searchWorkflows).mockRejectedValue(
+			new Error('Workflow search unavailable'),
+		);
+
+		const { findByText } = renderComponent({
+			props: {
+				modelValue: true,
+				query: 'ord',
+				projectId: 'project-1',
+				artifacts: [{ id: 'w1', name: 'Orders' }],
+			},
+		});
+
+		expect(await findByText('Orders')).toBeVisible();
+		expect(await findByText("Workflows couldn't load. Try again.")).toBeVisible();
+		expect(await findByText('Retry')).toBeVisible();
 	});
 
 	it('shows node counts next to expandable workflow and group chevrons', async () => {

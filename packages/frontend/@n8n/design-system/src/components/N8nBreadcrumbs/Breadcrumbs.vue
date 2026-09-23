@@ -208,7 +208,7 @@ const handleTooltipClose = () => {
 						@action="emitItemSelected"
 						@item-mouseup="onHiddenItemMouseUp"
 					>
-						<N8nText :bold="true" :class="$style.dots">...</N8nText>
+						<N8nText tag="button" type="button" :bold="true" :class="$style.dots">...</N8nText>
 					</N8nActionToggle>
 				</div>
 				<!-- Just a tooltip for smaller versions -->
@@ -395,7 +395,12 @@ const handleTooltipClose = () => {
 }
 
 .dots {
+	appearance: none;
 	padding: 0 var(--spacing--4xs);
+	border: none;
+	background: none;
+	font: inherit;
+	cursor: pointer;
 	color: var(--color--text--tint-1);
 	border-radius: var(--radius);
 

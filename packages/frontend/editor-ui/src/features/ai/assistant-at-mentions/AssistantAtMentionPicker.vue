@@ -52,6 +52,7 @@ const props = withDefaults(
 		artifacts?: readonly WorkflowArtifactReference[];
 		activeWorkflowId?: string;
 		excludedKeys?: readonly string[];
+		excludedWorkflowIds?: readonly string[];
 		inputElement?: HTMLTextAreaElement | null;
 		reference?: HTMLElement | null;
 		disabled?: boolean;
@@ -61,6 +62,7 @@ const props = withDefaults(
 		artifacts: () => [],
 		activeWorkflowId: undefined,
 		excludedKeys: () => [],
+		excludedWorkflowIds: () => [],
 		inputElement: null,
 		reference: null,
 		disabled: false,
@@ -80,6 +82,7 @@ const { width: referenceWidth } = useElementSize(referenceElement);
 const menuWidth = computed(() =>
 	referenceWidth.value > 0 ? `${referenceWidth.value}px` : undefined,
 );
+const excludedKeys = computed(() => new Set(props.excludedKeys));
 const artifactIndex = useArtifactMentionIndex({
 	artifacts: () => props.artifacts,
 	activeWorkflowId: () => props.activeWorkflowId,
@@ -87,15 +90,16 @@ const artifactIndex = useArtifactMentionIndex({
 const artifactProvider = createArtifactMentionSourceProvider({
 	artifacts: () => props.artifacts,
 	artifactIndex,
+	excludedKeys,
 });
 const workflowProvider = createWorkflowMentionSourceProvider({
 	projectId: () => props.projectId,
 	artifactWorkflowIds: () => props.artifacts.map(({ id }) => id),
+	excludedWorkflowIds: () => props.excludedWorkflowIds,
 });
-const sources = useAssistantMentionSources([artifactProvider, workflowProvider]);
+const sources = useAssistantMentionSources([artifactProvider, workflowProvider], { excludedKeys });
 const searchPending = ref(false);
 let highlightedForCurrentOpen = false;
-const excludedKeys = computed(() => new Set(props.excludedKeys));
 
 function isMenuItem(item: MentionMenuItem | undefined): item is MentionMenuItem {
 	return item !== undefined;
@@ -260,6 +264,16 @@ const runSearch = useDebounceFn(async (query: string) => {
 }, getDebounceTime(DEBOUNCE_TIME.INPUT.SEARCH));
 
 watch(
+	() => props.modelValue,
+	(open) => {
+		if (open) {
+			void Promise.resolve(nodeTypesStore.loadNodeTypesIfNotLoaded()).catch(() => undefined);
+		}
+	},
+	{ immediate: true },
+);
+
+watch(
 	[() => props.modelValue, () => props.query],
 	([open, query]) => {
 		if (!open) {
@@ -392,6 +406,7 @@ defineExpose({ handleExternalKeydown });
 					icon="at-sign"
 					variant="ghost"
 					size="medium"
+					:disabled="disabled"
 					:title="i18n.baseText('instanceAi.mentions.buttonLabel')"
 					:aria-label="i18n.baseText('instanceAi.mentions.buttonLabel')"
 					data-test-id="instance-ai-mention-button"
@@ -419,7 +434,12 @@ defineExpose({ handleExternalKeydown });
 			/>
 		</template>
 		<template #item-label="{ item, ui }">
-			<N8nText :class="ui.class" :title="item.label" size="medium" color="text-dark">
+			<N8nText
+				:class="ui.class"
+				:title="item.label"
+				size="medium"
+				:color="item.disabled ? 'text-xlight' : 'text-dark'"
+			>
 				<template v-if="query.trim() && item.data?.item">
 					<template
 						v-for="(breadcrumb, index) in item.data.item.breadcrumbs"
@@ -452,6 +472,17 @@ defineExpose({ handleExternalKeydown });
 			>
 				{{ item.data.item.nodeCount }}
 			</N8nText>
+		</template>
+		<template
+			v-if="query.trim() && menuItems.length > 0 && sources.providerErrors.value.size > 0"
+			#footer
+		>
+			<div :class="$style.errorState">
+				<N8nText size="small">{{ i18n.baseText('instanceAi.mentions.loadError') }}</N8nText>
+				<N8nButton size="small" variant="outline" @click="retrySources">
+					{{ i18n.baseText('generic.retry') }}
+				</N8nButton>
+			</div>
 		</template>
 	</N8nDropdownMenu>
 </template>
